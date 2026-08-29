@@ -3,7 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Hệ Thống Tra Cứu & Quản Trị Quy Chế Hàng Không</title>
+    <title>Hệ Thống Tra Cứu Quy Chế Hàng Không</title>
+
+    <!-- PWA Setup -->
+    <meta name="theme-color" content="#075985">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quy Chế HK">
+    <link rel="manifest" href="./manifest.webmanifest">
+
+    <script>
+        // KÍCH HOẠT CHẾ ĐỘ NGƯỜI DÙNG XEM (ẨN TOÀN BỘ CÁC NÚT QUẢN TRỊ)
+        window.IS_ONLINE_CLIENT_MODE = true;
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -46,6 +60,17 @@
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen transition-colors duration-200">
     <div id="root"></div>
     <script type="text/babel">
+
+        // ĐĂNG KÝ SERVICE WORKER CHO PWA NẾU ĐANG CHẠY MÔI TRƯỜNG WEB (HTTP/HTTPS)
+        if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    console.log('✅ PWA ServiceWorker đã sẵn sàng!', reg.scope);
+                }).catch(err => {
+                    console.log('⚠️ ServiceWorker không khởi chạy được (offline local):', err);
+                });
+            });
+        }
 
         class ErrorBoundary extends React.Component {
             constructor(props) {
@@ -306,7 +331,7 @@
                 }
             }
 
-            throw new Error("AI không trả về cấu trúc JSON hợp lệ: " + (cleaned.length > 150 ? cleaned.substring(0, 150) + '...' : cleaned));
+            throw new Error("AI không trả về cấu trúc JSON hợp lệ.");
         };
 
         const quickGoogleTranslate = async (text, targetLang = 'vi', sourceLang = 'auto') => {
@@ -541,51 +566,6 @@
                 };
             }, [pageNum, scale, numPages]);
 
-            React.useEffect(() => {
-                const el = containerRef.current;
-                if (!el) return;
-
-                const handleWheelZoom = (e) => {
-                    if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                        e.preventDefault();
-                        const delta = e.deltaY < 0 ? 0.15 : -0.15;
-                        setScale(s => Math.min(4.0, Math.max(0.4, Number((s + delta).toFixed(2)))));
-                    }
-                };
-
-                el.addEventListener('wheel', handleWheelZoom, { passive: false });
-                return () => el.removeEventListener('wheel', handleWheelZoom);
-            }, []);
-
-            const handleTouchStart = (e) => {
-                if (e.touches.length === 2) {
-                    touchDistRef.current = Math.hypot(
-                        e.touches[0].clientX - e.touches[1].clientX,
-                        e.touches[0].clientY - e.touches[1].clientY
-                    );
-                }
-            };
-
-            const handleTouchMove = (e) => {
-                if (e.touches.length === 2 && touchDistRef.current) {
-                    e.preventDefault();
-                    const newDist = Math.hypot(
-                        e.touches[0].clientX - e.touches[1].clientX,
-                        e.touches[0].clientY - e.touches[1].clientY
-                    );
-                    const diff = newDist - touchDistRef.current;
-                    if (Math.abs(diff) > 12) {
-                        const factor = diff > 0 ? 0.08 : -0.08;
-                        setScale(s => Math.min(4.0, Math.max(0.4, Number((s + factor).toFixed(2)))));
-                        touchDistRef.current = newDist;
-                    }
-                }
-            };
-
-            const handleTouchEnd = () => {
-                touchDistRef.current = null;
-            };
-
             const zoomIn = () => setScale(s => Math.min(4.0, Number((s + 0.2).toFixed(1))));
             const zoomOut = () => setScale(s => Math.max(0.4, Number((s - 0.2).toFixed(1))));
             const zoomReset = () => setScale(window.innerWidth < 640 ? 1.0 : 1.3);
@@ -619,13 +599,7 @@
                         </div>
                     </div>
 
-                    <div 
-                        ref={containerRef} 
-                        onTouchStart={handleTouchStart}
-                        onTouchMove={handleTouchMove}
-                        onTouchEnd={handleTouchEnd}
-                        className="flex-1 overflow-auto p-2 flex justify-center items-start custom-scrollbar min-h-[450px] touch-pan-x touch-pan-y"
-                    >
+                    <div ref={containerRef} className="flex-1 overflow-auto p-2 flex justify-center items-start custom-scrollbar min-h-[450px] touch-pan-x touch-pan-y">
                         {loading && <div className="p-8 text-center text-slate-500 font-bold text-xs">⏳ Đang nạp trang PDF chất lượng cao...</div>}
                         {error && (
                             <div className="p-6 text-center space-y-2">
@@ -861,6 +835,9 @@
 
         function App() {
             const isStandaloneMode = Boolean(EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.meta && EMBEDDED_WORKSPACE.meta.length > 0);
+            
+            // BIẾN KIỂM SOÁT CHẾ ĐỘ NGƯỜI DÙNG XEM (ẨN TOÀN BỘ NÚT QUẢN TRỊ KHI CHẠY ONLINE GITHUB HOẶC OFFLINE FILE)
+            const isReaderClientMode = Boolean(window.IS_ONLINE_CLIENT_MODE || isStandaloneMode);
 
             const [docs, setDocs] = useState(initialDocsMeta);
             const [savedRegistry, setSavedRegistry] = useState([]);
@@ -891,6 +868,7 @@
             const [docNavStates, setDocNavStates] = useState({});
             const [jumpHistory, setJumpHistory] = useState(null);
             const [globalLangMode, setGlobalLangMode] = useState({});
+            const [installPrompt, setInstallPrompt] = useState(null);
 
             const [selectorModal, setSelectorModal] = useState({
                 isOpen: false,
@@ -993,6 +971,28 @@
             ];
 
             useEffect(() => {
+                const handleBeforeInstall = (e) => {
+                    e.preventDefault();
+                    setInstallPrompt(e);
+                };
+                window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+                return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+            }, []);
+
+            const handleInstallPwa = async () => {
+                if (!installPrompt) {
+                    alert("Để cài đặt App trên iPhone/iPad: Bạn hãy bấm biểu tượng Chia sẻ (Share ⎋) trong Safari -> chọn 'Thêm vào MH chính' (Add to Home Screen)!");
+                    return;
+                }
+                installPrompt.prompt();
+                const { outcome } = await installPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    notify("🎉 Cảm ơn bạn đã cài đặt Ứng dụng!");
+                    setInstallPrompt(null);
+                }
+            };
+
+            useEffect(() => {
                 if (aiOpen && chatEndRef.current) {
                     chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
                 }
@@ -1018,13 +1018,11 @@
                                 if (manifest && manifest.files && Array.isArray(manifest.files)) {
                                     notify(`🌐 Đang nạp ${manifest.files.length} phần dữ liệu từ GitHub...`);
                                     
-                                    // Tải song song tất cả các part
                                     const rawParts = await Promise.all(manifest.files.map(async (fileName) => {
                                         const partRes = await fetch('./' + fileName);
                                         return partRes.json();
                                     }));
 
-                                    // Sắp xếp đúng thứ tự và ghép chuỗi
                                     rawParts.sort((a, b) => (a.index || 0) - (b.index || 0));
                                     const fullJsonStr = rawParts.map(p => p.chunk || '').join('');
                                     const combinedData = JSON.parse(fullJsonStr);
@@ -1240,23 +1238,19 @@
                 return !vietnamesePattern.test(sampleTexts);
             }, [docData, activeDocId]);
 
-            // HÀM TẢI DỮ LIỆU ĐỂ LƯU VÀO INDEXEDDB TRÌNH DUYỆT (CHẠY OFFLINE)
             const handleDownloadOfflineData = async () => {
                 try {
-                    notify("⏳ Đang kiểm tra và tải dữ liệu lưu vào trình duyệt...");
+                    notify("⏳ Đang lưu dữ liệu vào bộ nhớ trình duyệt để chạy Offline...");
 
                     let packageMeta = null;
                     let packageData = {};
 
-                  
-                    if (!packageMeta) {
-                        if (onlineWorkspaceData && onlineWorkspaceData.meta) {
-                            packageMeta = onlineWorkspaceData.meta;
-                            packageData = onlineWorkspaceData.data || {};
-                        } else if (isStandaloneMode && EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.meta) {
-                            packageMeta = EMBEDDED_WORKSPACE.meta;
-                            packageData = EMBEDDED_WORKSPACE.data || {};
-                        }
+                    if (onlineWorkspaceData && onlineWorkspaceData.meta) {
+                        packageMeta = onlineWorkspaceData.meta;
+                        packageData = onlineWorkspaceData.data || {};
+                    } else if (isStandaloneMode && EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.meta) {
+                        packageMeta = EMBEDDED_WORKSPACE.meta;
+                        packageData = EMBEDDED_WORKSPACE.data || {};
                     }
 
                     if (!packageMeta || Object.keys(packageData).length === 0) {
@@ -1288,13 +1282,12 @@
                     await refreshStoredRegistry();
                     await loadDocData(activeDocId || packageMeta[0]?.id || 'main');
 
-                    alert("🎉 Tải data thành công!\n\nToàn bộ quy chế, điều khoản và bản dịch đã được lưu trực tiếp vào bộ nhớ trình duyệt của bạn. Bây giờ bạn có thể ngắt kết nối mạng Internet mà vẫn tra cứu bình thường!");
+                    alert("🎉 Tải data thành công!\n\nToàn bộ quy chế và phụ lục đã được lưu vào bộ nhớ trình duyệt. Bạn có thể ngắt mạng mà vẫn mở tra cứu bình thường!");
                 } catch (err) {
                     alert("❌ Lỗi khi tải dữ liệu offline: " + err.message);
                 }
             };
 
-            // HÀM CHUYỂN ĐỔI NGÔN NGỮ NHANH
             const executeFastTranslation = async (targetLangCode, targetLangName, targetArticle = null) => {
                 setLangSelectModal({ isOpen: false, mode: 'all', article: null });
 
@@ -1883,7 +1876,10 @@ ${contextArticles}`;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Hệ Thống Tra Cứu & Quản Trị Quy Chế Hàng Không</title>
+    <title>Hệ Thống Tra Cứu Quy Chế Hàng Không</title>
+    <meta name="theme-color" content="#075985">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script src="https://cdn.tailwindcss.com"><\/script>
     <script>
         tailwind.config = {
@@ -1944,10 +1940,10 @@ ${scriptCode}
                 }
             };
 
-            // HÀM ĐÓNG GÓI PHÂN MẢNH CHUẨN XÁC KHỐI DỮ LIỆU (KHỐNG CHẾ MỖI FILE LUÔN <= 12MB)
+            // HÀM ĐÓNG GÓI CHO GITHUB PAGES KÈM PWA (MANIFEST + SERVICE WORKER) & BỎ HOÀN TOÀN CÁC NÚT QUẢN TRỊ
             const exportOnlineGithubWorkspace = async () => {
                 try {
-                    notify("🌐 Đang kiểm tra & phân mảnh dữ liệu cho GitHub...");
+                    notify("🌐 Đang phân mảnh dữ liệu & tạo bộ cài PWA cho GitHub...");
                     const allEntries = await WorkspaceDB.getAllEntries();
                     const packageMeta = docs.map(d => ({ ...d }));
                     const packageData = {};
@@ -1967,10 +1963,7 @@ ${scriptCode}
                         return;
                     }
 
-                    // Chuyển toàn bộ dữ liệu thành chuỗi JSON
                     const fullDataString = JSON.stringify(packageData);
-                    
-                    // CẮT CỨNG MỖI PHẦN TỐI ĐA 10MB KÝ TỰ (~10MB - 12MB/file, KHÔNG BAO GIỜ VƯỢT 25MB)
                     const CHUNK_CHAR_LIMIT = 10 * 1024 * 1024;
                     const chunks = [];
                     for (let i = 0; i < fullDataString.length; i += CHUNK_CHAR_LIMIT) {
@@ -1979,7 +1972,77 @@ ${scriptCode}
 
                     const partFileNames = chunks.map((_, idx) => `data_part_${idx + 1}.json`);
 
-                    // 1. Xuất file điều phối data_manifest.json (~2KB)
+                    // 1. Xuất file manifest.webmanifest cho PWA
+                    const pwaManifestContent = {
+                        name: "Hệ Thống Tra Cứu Quy Chế Hàng Không",
+                        short_name: "QuyChế HK",
+                        description: "Hệ thống tra cứu quy chế hàng không VARs, CAME, MOE & ICAO thông minh",
+                        start_url: "./index.html",
+                        display: "standalone",
+                        background_color: "#0f172a",
+                        theme_color: "#075985",
+                        orientation: "any",
+                        icons: [
+                            {
+                                src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23075985'/%3E%3Cpath d='M256 120 L380 400 L256 340 L132 400 Z' fill='%23ffffff'/%3E%3C/svg%3E",
+                                sizes: "192x192 512x512",
+                                type: "image/svg+xml",
+                                purpose: "any maskable"
+                            }
+                        ]
+                    };
+                    const pwaBlob = new Blob([JSON.stringify(pwaManifestContent, null, 2)], { type: 'application/manifest+json;charset=utf-8' });
+                    triggerFileDownload(pwaBlob, 'manifest.webmanifest');
+
+                    // 2. Xuất file Service Worker sw.js
+                    const swContent = `// Service Worker tự động cache ứng dụng PWA
+const CACHE_NAME = 'aviation-reg-cache-v1';
+const CORE_ASSETS = [
+    './',
+    './index.html',
+    './data_manifest.json',
+    './manifest.webmanifest',
+    'https://cdn.tailwindcss.com',
+    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap',
+    'https://unpkg.com/react@18/umd/react.production.min.js',
+    'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+    'https://unpkg.com/@babel/standalone/babel.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+];
+
+self.addEventListener('install', (e) => {
+    e.waitUntil(
+        caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())
+    );
+});
+
+self.addEventListener('activate', (e) => {
+    e.waitUntil(
+        caches.keys().then(keys => Promise.all(
+            keys.map(k => { if (k !== CACHE_NAME) return caches.delete(k); })
+        )).then(() => self.clients.claim())
+    );
+});
+
+self.addEventListener('fetch', (e) => {
+    e.respondWith(
+        caches.match(e.request).then(cached => {
+            if (cached) return cached;
+            return fetch(e.request).then(response => {
+                if (!response || response.status !== 200 || response.type !== 'basic') return response;
+                const clone = response.clone();
+                caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+                return response;
+            }).catch(() => caches.match('./index.html'));
+        })
+    );
+});`;
+                    const swBlob = new Blob([swContent], { type: 'application/javascript;charset=utf-8' });
+                    setTimeout(() => triggerFileDownload(swBlob, 'sw.js'), 200);
+
+                    // 3. Xuất file data_manifest.json
                     const manifestContent = {
                         meta: packageMeta,
                         files: partFileNames,
@@ -1987,18 +2050,18 @@ ${scriptCode}
                         exportedAt: new Date().toISOString()
                     };
                     const manifestBlob = new Blob([JSON.stringify(manifestContent, null, 2)], { type: 'application/json;charset=utf-8' });
-                    triggerFileDownload(manifestBlob, 'data_manifest.json');
+                    setTimeout(() => triggerFileDownload(manifestBlob, 'data_manifest.json'), 400);
 
-                    // 2. Xuất lần lượt từng file data_part_X.json (Mỗi file ~10MB)
+                    // 4. Xuất các file data_part_X.json
                     chunks.forEach((chunkStr, idx) => {
                         setTimeout(() => {
                             const chunkPayload = JSON.stringify({ index: idx, chunk: chunkStr });
                             const partBlob = new Blob([chunkPayload], { type: 'application/json;charset=utf-8' });
                             triggerFileDownload(partBlob, `data_part_${idx + 1}.json`);
-                        }, (idx + 1) * 350);
+                        }, 600 + idx * 300);
                     });
 
-                    // 3. Xuất file index.html
+                    // 5. Xuất file index.html (đã kích hoạt IS_ONLINE_CLIENT_MODE = true để ẩn sạch các nút quản trị)
                     const scriptBabel = document.querySelector('script[type="text/babel"]');
                     let scriptCode = scriptBabel ? scriptBabel.textContent : '';
                     scriptCode = scriptCode.replace(/<\/script/gi, '<\\/script');
@@ -2008,7 +2071,21 @@ ${scriptCode}
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Hệ Thống Tra Cứu & Quản Trị Quy Chế Hàng Không</title>
+    <title>Hệ Thống Tra Cứu Quy Chế Hàng Không</title>
+
+    <!-- PWA Setup -->
+    <meta name="theme-color" content="#075985">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quy Chế HK">
+    <link rel="manifest" href="./manifest.webmanifest">
+
+    <script>
+        // KÍCH HOẠT CHẾ ĐỘ NGƯỜI DÙNG XEM (ẨN TOÀN BỘ CÁC NÚT QUẢN TRỊ)
+        window.IS_ONLINE_CLIENT_MODE = true;
+    <\/script>
+
     <script src="https://cdn.tailwindcss.com"><\/script>
     <script>
         tailwind.config = {
@@ -2059,16 +2136,18 @@ ${scriptCode}
                     setTimeout(() => {
                         const htmlBlob = new Blob([templateHtml], { type: 'text/html;charset=utf-8' });
                         triggerFileDownload(htmlBlob, 'index.html');
-                    }, (chunks.length + 1) * 350);
+                    }, (chunks.length + 3) * 320);
 
                     setExportModal(false);
                     alert(
-                        `🎉 ĐÃ PHÂN MẢNH DỮ LIỆU THÀNH CÔNG!\n\n` +
-                        `Tổng dữ liệu đã được chia đều thành ${chunks.length} phần (mỗi file chỉ ~10MB, đảm bảo 100% không vượt giới hạn 25MB của GitHub):\n` +
-                        `1. index.html\n` +
-                        `2. data_manifest.json\n` +
-                        `3. ${partFileNames.join(', ')}\n\n` +
-                        `👉 Bạn chỉ cần kéo thả TẤT CẢ các file vừa tải về vào GitHub là web chạy ngay!`
+                        `🎉 ĐÃ ĐÓNG GÓI ONLINE KÈM PWA THÀNH CÔNG!\n\n` +
+                        `Danh sách các file được tạo:\n` +
+                        `1. index.html (Đã ẩn sạch nút quản trị)\n` +
+                        `2. manifest.webmanifest (Hỗ trợ cài App PWA)\n` +
+                        `3. sw.js (Bộ đệm chạy Offline cho PWA)\n` +
+                        `4. data_manifest.json\n` +
+                        `5. ${partFileNames.join(', ')}\n\n` +
+                        `👉 Bạn chỉ cần kéo thả toàn bộ các file này lên GitHub Repository là web chạy ngay và cho phép người dùng Cài đặt App lên điện thoại/máy tính bảng!`
                     );
                 } catch (e) {
                     alert("Lỗi xuất gói Online: " + e.message);
@@ -2264,7 +2343,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                 const resData = await response.json();
                 if (resData.error) {
-                    throw new Error(`Lỗi Google API (${resData.error.code || 'Gemini'}): ${resData.error.message || 'Yêu cầu không hợp lệ'}`);
+                    throw new Error(`Lỗi Google API: ${resData.error.message || 'Yêu cầu không hợp lệ'}`);
                 }
 
                 const rawReply = resData?.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -2934,10 +3013,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
             const totalPages = Math.ceil(filtered.length / 12) || 1;
             const filteredAppendices = useMemo(() => AviationDB.queryAppendices(appendixSearch), [appendixSearch, appendixCount, docData]);
 
-            const closedSavedDocs = useMemo(() => {
-                return (savedRegistry || []).filter(r => r.id !== 'main' && !docs.some(d => d.id === r.id));
-            }, [savedRegistry, docs]);
-
             const currentArticle = AviationDB.getArticle(singleId);
             const currentArtMode = currentArticle ? (articleViewModes[`${activeDocId}_art_${currentArticle.id}`] || globalLangMode[activeDocId] || 'original') : 'original';
             const isCurrentArticleTranslated = currentArtMode !== 'original';
@@ -3016,7 +3091,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             </div>
                         )}
 
-                        {/* MODAL BẬT DANH SÁCH TÀI LIỆU ĐANG MỞ KHI BẤM HYPERLINK */}
+                        {/* MODAL HYPERLINK JUMP */}
                         {selectorModal.isOpen && (
                             <div className="fixed inset-0 z-[95] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in zoom-in duration-150">
                                 <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden">
@@ -3066,7 +3141,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                         </div>
                                                     </div>
 
-                                                   
                                                     <button className="px-3 py-1.5 bg-aviation-600 hover:bg-aviation-500 text-white rounded-lg font-bold text-xs shadow shrink-0 group-hover:translate-x-0.5 transition">
                                                         Mở ngay &rarr;
                                                     </button>
@@ -3077,332 +3151,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                                     <div className="bg-slate-100 dark:bg-slate-750 px-4 py-2.5 text-right">
                                         <button onClick={() => setSelectorModal(prev => ({ ...prev, isOpen: false }))} className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-xs font-bold">Đóng</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL TIẾN TRÌNH DỊCH TỰ ĐỘNG */}
-                        {batchTranslateModal.isOpen && (
-                            <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in zoom-in duration-150">
-                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden">
-                                    <div className="bg-gradient-to-r from-emerald-700 to-aviation-700 text-white p-4 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xl">🌐</span>
-                                            <h3 className="text-sm font-bold">Đang Dịch Tự Động ({batchTranslateModal.targetLangName})</h3>
-                                        </div>
-                                        {!batchTranslateModal.isRunning && (
-                                            <button onClick={() => setBatchTranslateModal(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                        )}
-                                    </div>
-                                    <div className="p-5 space-y-4 text-xs">
-                                        <div className="space-y-1">
-                                            <div className="font-semibold text-slate-700 dark:text-slate-200 truncate">
-                                                📄 Tài liệu: <strong>{batchTranslateModal.docName}</strong>
-                                            </div>
-                                            <div className="text-slate-500">
-                                                Ngôn ngữ đích: <strong className="text-emerald-600 dark:text-emerald-400">{batchTranslateModal.targetLangName}</strong>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                            <div className="flex justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300">
-                                                <span>Tiến độ: {batchTranslateModal.current} / {batchTranslateModal.total} mục chưa dịch</span>
-                                                <span>{batchTranslateModal.total > 0 ? Math.round((batchTranslateModal.current / batchTranslateModal.total) * 100) : 0}%</span>
-                                            </div>
-                                            <div className="w-full bg-slate-100 dark:bg-slate-750 h-2.5 rounded-full overflow-hidden">
-                                                <div 
-                                                    className="bg-emerald-500 h-full rounded-full transition-all duration-150"
-                                                    style={{ width: `${batchTranslateModal.total > 0 ? (batchTranslateModal.current / batchTranslateModal.total) * 100 : 0}%` }}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                                            💡 Các bản dịch sẽ được lưu trực tiếp vào CSDL máy. Khi bạn xuất gói Offline, toàn bộ văn bản dịch sẽ xem được tức thì mà không cần mạng Internet!
-                                        </p>
-                                    </div>
-                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 flex justify-end gap-2">
-                                        {batchTranslateModal.isRunning ? (
-                                            <>
-                                                {batchTranslateModal.isPaused ? (
-                                                    <button 
-                                                        onClick={() => { batchTranslatePauseRef.current = false; setBatchTranslateModal(prev => ({ ...prev, isPaused: false })); }}
-                                                        className="px-3.5 py-1.5 bg-emerald-600 text-white rounded-xl font-bold shadow"
-                                                    >
-                                                        ▶️ Tiếp tục
-                                                    </button>
-                                                ) : (
-                                                    <button 
-                                                        onClick={() => { batchTranslatePauseRef.current = true; setBatchTranslateModal(prev => ({ ...prev, isPaused: true })); }}
-                                                        className="px-3.5 py-1.5 bg-amber-500 text-slate-900 rounded-xl font-bold shadow"
-                                                    >
-                                                        ⏸️ Tạm dừng
-                                                    </button>
-                                                )}
-                                                <button 
-                                                    onClick={() => { batchTranslateAbortRef.current = true; }}
-                                                    className="px-3.5 py-1.5 bg-rose-600 text-white rounded-xl font-bold shadow"
-                                                >
-                                                    ⏹️ Dừng lại
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button onClick={() => setBatchTranslateModal(prev => ({ ...prev, isOpen: false }))} className="px-4 py-1.5 bg-aviation-600 text-white rounded-xl font-bold">
-                                                Đóng
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL BỘ CHỌN ĐIỀU KHOẢN TÀI LIỆU B */}
-                        {docBArticleSelector.isOpen && (
-                            <div className="fixed inset-0 z-[80] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in zoom-in duration-150">
-                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-xl w-full h-[80vh] shadow-2xl border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden">
-                                    <div className="bg-indigo-800 text-white p-4 flex justify-between items-center shrink-0">
-                                        <div>
-                                            <h3 className="text-sm font-bold">Chọn Điều/Mục từ "{compareModalState.targetDocName}"</h3>
-                                            <div className="text-[11px] text-indigo-200">Đối chiếu với mục: <strong className="text-yellow-300">{docBArticleSelector.rowCodeA}</strong></div>
-                                        </div>
-                                        <button onClick={() => setDocBArticleSelector(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                    </div>
-
-                                    <div className="p-3 bg-slate-100 dark:bg-slate-750 border-b flex items-center gap-2 shrink-0">
-                                        <input
-                                            type="text"
-                                            placeholder="🔍 Tìm kiếm theo số hiệu hoặc tiêu đề mục Doc B..."
-                                            value={docBArticleSelector.searchQuery}
-                                            onChange={e => setDocBArticleSelector(prev => ({ ...prev, searchQuery: e.target.value }))}
-                                            className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-600 dark:bg-slate-900"
-                                        />
-                                        <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
-                                            Đã chọn: {docBArticleSelector.selectedCodes.length} mục
-                                        </span>
-                                    </div>
-
-                                    <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar text-xs">
-                                        {Object.values(compareModalState.targetDocArticles || {})
-                                            .filter(art => {
-                                                const q = (docBArticleSelector.searchQuery || '').toLowerCase().trim();
-                                                if (!q) return true;
-                                                return (art.code && art.code.toLowerCase().includes(q)) || 
-                                                       (art.title && art.title.toLowerCase().includes(q)) ||
-                                                       String(art.id).toLowerCase().includes(q);
-                                            })
-                                            .map(art => {
-                                                const code = art.code || String(art.id);
-                                                const isChecked = docBArticleSelector.selectedCodes.includes(code);
-                                                return (
-                                                    <label 
-                                                        key={code}
-                                                        className={`p-2.5 rounded-xl border flex items-start gap-2.5 cursor-pointer transition select-none ${isChecked ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700' : 'bg-white dark:bg-slate-855 border-slate-200 dark:border-slate-700 hover:bg-slate-50'}`}
-                                                    >
-                                                        <input 
-                                                            type="checkbox"
-                                                            checked={isChecked}
-                                                            onChange={e => {
-                                                                const checked = e.target.checked;
-                                                                setDocBArticleSelector(prev => {
-                                                                    const updated = checked 
-                                                                        ? [...prev.selectedCodes, code]
-                                                                        : prev.selectedCodes.filter(c => c !== code);
-                                                                    return { ...prev, selectedCodes: updated };
-                                                                });
-                                                            }}
-                                                            className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500"
-                                                        />
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                                                                <span className="px-1.5 py-0.5 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 rounded text-[10px]">{code}</span>
-                                                                <span className="truncate">{art.title}</span>
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 whitespace-pre-line">{art.plainText}</div>
-                                                        </div>
-                                                    </label>
-                                                );
-                                            })}
-                                    </div>
-
-                                    <div className="p-3 bg-slate-100 dark:bg-slate-750 border-t flex justify-between items-center shrink-0">
-                                        <button 
-                                            onClick={() => setDocBArticleSelector(prev => ({ ...prev, selectedCodes: [] }))}
-                                            className="px-3 py-1.5 text-xs text-rose-600 font-bold hover:underline"
-                                        >
-                                            Bỏ chọn tất cả
-                                        </button>
-                                        <div className="flex gap-2">
-                                            <button 
-                                                onClick={() => setDocBArticleSelector(prev => ({ ...prev, isOpen: false }))}
-                                                className="px-3.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-600 text-xs font-bold"
-                                            >
-                                                Hủy
-                                            </button>
-                                            <button 
-                                                onClick={saveDocBSelection}
-                                                className="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow"
-                                            >
-                                                💾 Lưu lựa chọn ({docBArticleSelector.selectedCodes.length} mục)
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL NẠP TÀI LIỆU */}
-                        {uploadMenuModal && (
-                            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-150">
-                                    <div className="bg-aviation-800 text-white p-4 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xl">📂</span>
-                                            <h3 className="text-sm font-bold">Nạp Tài Liệu Vào Không Gian Làm Việc</h3>
-                                        </div>
-                                        <button onClick={() => setUploadMenuModal(false)} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                    </div>
-                                    <div className="p-4 space-y-3 text-xs">
-                                        <label className="w-full p-3.5 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 flex items-center justify-between transition cursor-pointer shadow-sm">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-2xl">📝</span>
-                                                <div>
-                                                    <div className="font-extrabold text-blue-700 dark:text-blue-300 text-xs sm:text-sm">Nạp File Word (.docx)</div>
-                                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Tự động bóc tách Điều/Khoản/Mục (đến cấp x.x) và Phụ lục</div>
-                                                </div>
-                                            </div>
-                                            <span className="text-blue-600 dark:text-blue-400 font-bold text-base">&uarr;</span>
-                                            <input type="file" accept=".docx" className="hidden" onChange={handleNewDocUpload} />
-                                        </label>
-
-                                        <label className="w-full p-3.5 rounded-xl border border-red-300 dark:border-red-800 bg-red-50/70 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 flex items-center justify-between transition cursor-pointer shadow-sm">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-2xl">📄</span>
-                                                <div>
-                                                    <div className="font-extrabold text-red-700 dark:text-red-300 text-xs sm:text-sm">Nạp File PDF (.pdf)</div>
-                                                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Xem trước và tích hợp trực tiếp trong hệ thống</div>
-                                                </div>
-                                            </div>
-                                            <span className="text-red-600 dark:text-red-400 font-bold text-base">&uarr;</span>
-                                            <input type="file" accept=".pdf" className="hidden" onChange={handleNewDocUpload} />
-                                        </label>
-
-                                        {closedSavedDocs.length > 0 && (
-                                            <div className="pt-2 border-t">
-                                                <div className="font-bold text-slate-700 dark:text-slate-200 mb-2">Tài liệu đã lưu trong CSDL máy:</div>
-                                                <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar">
-                                                    {closedSavedDocs.map(c => (
-                                                        <div key={c.id} className="p-2 rounded-lg border flex items-center justify-between bg-slate-50 dark:bg-slate-750">
-                                                            <span className="truncate pr-2 font-medium">{c.name}</span>
-                                                            <button onClick={() => { setDocs(prev => [...prev, c]); setUploadMenuModal(false); switchDoc(c.id); }} className="px-2.5 py-1 bg-aviation-600 text-white rounded text-[11px] font-bold shrink-0">Mở lại</button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-2.5 text-right">
-                                        <button onClick={() => setUploadMenuModal(false)} className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-xs font-bold">Đóng</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL THÊM PHỤ LỤC */}
-                        {addAppendixModal.isOpen && (
-                            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-150">
-                                    <div className="bg-emerald-700 text-white p-4 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xl">📑</span>
-                                            <h3 className="text-sm font-bold">Thêm Phụ Lục Mới</h3>
-                                        </div>
-                                        <button onClick={() => setAddAppendixModal(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center">&times;</button>
-                                    </div>
-                                    <div className="p-4 space-y-3 text-xs">
-                                        <div>
-                                            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Mã / Số hiệu phụ lục:</label>
-                                            <input type="text" placeholder="Ví dụ: PL 1, Appendix A..." value={addAppendixModal.code} onChange={e => setAddAppendixModal({ ...addAppendixModal, code: e.target.value })} className="w-full p-2 border rounded-lg dark:bg-slate-900" />
-                                        </div>
-                                        <div>
-                                            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Tên / Tiêu đề phụ lục: *</label>
-                                            <input type="text" placeholder="Ví dụ: Mẫu đơn đề nghị cấp chứng chỉ..." value={addAppendixModal.title} onChange={e => setAddAppendixModal({ ...addAppendixModal, title: e.target.value })} className="w-full p-2 border rounded-lg dark:bg-slate-900" />
-                                        </div>
-                                        <div>
-                                            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Mô tả / Nội dung văn bản:</label>
-                                            <textarea rows="3" placeholder="Nội dung phụ lục hoặc ghi chú biểu mẫu..." value={addAppendixModal.plainText} onChange={e => setAddAppendixModal({ ...addAppendixModal, plainText: e.target.value })} className="w-full p-2 border rounded-lg dark:bg-slate-900" />
-                                        </div>
-                                    </div>
-                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 flex justify-end gap-2">
-                                        <button onClick={() => setAddAppendixModal(prev => ({ ...prev, isOpen: false }))} className="px-3 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold">Hủy</button>
-                                        <button onClick={handleCreateAppendix} className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg font-bold shadow">💾 Thêm ngay</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL ĐÓNG GÓI HỆ THỐNG (ONLINE & OFFLINE) */}
-                        {exportModal && (
-                            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-150">
-                                    <div className="bg-gradient-to-r from-aviation-800 to-indigo-800 text-white p-4 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xl">📦</span>
-                                            <h3 className="text-sm font-bold">Đóng Gói Hệ Thống (Online & Offline)</h3>
-                                        </div>
-                                        <button onClick={() => setExportModal(false)} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                    </div>
-                                    <div className="p-4 space-y-3 text-xs max-h-[75vh] overflow-y-auto custom-scrollbar">
-                                        <div className="p-3 bg-sky-50 dark:bg-sky-950/40 rounded-xl border border-sky-300 dark:border-sky-700 space-y-2">
-                                            <div className="font-bold text-sky-900 dark:text-sky-200 flex items-center gap-1.5 text-sm">
-                                                <span>🌐 1. Gói Web Online (GitHub Pages / Hosting)</span>
-                                            </div>
-                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                                                Tự động phân mảnh dữ liệu thành các file <strong>data_part_X.json &lt; 15MB</strong> để không bao giờ bị giới hạn 25MB của GitHub. Tải lên GitHub Pages web chạy ngay lập tức.
-                                            </p>
-                                            <button 
-                                                onClick={exportOnlineGithubWorkspace}
-                                                className="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold shadow text-xs flex items-center justify-center gap-1.5 transition"
-                                            >
-                                                <span>🌐</span>
-                                                <span>Tải Bộ File Online (index.html + data_parts)</span>
-                                            </button>
-                                        </div>
-
-                                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-700 space-y-2">
-                                            <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5 text-sm">
-                                                <span>⚡ 2. Gói Offline Siêu Nhẹ (1 File HTML duy nhất)</span>
-                                            </div>
-                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                                                Nhúng toàn bộ điều khoản & bản dịch vào 1 file HTML, lược bỏ PDF/Word đính kèm. Mở tức thì trên iPhone/iPad/Android không cần mạng.
-                                            </p>
-                                            <button 
-                                                onClick={() => exportStandaloneWorkspace(true)}
-                                                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold shadow text-xs flex items-center justify-center gap-1.5 transition"
-                                            >
-                                                <span>⚡</span>
-                                                <span>Tải Gói Offline Siêu Nhẹ</span>
-                                            </button>
-                                        </div>
-
-                                        <div className="p-3 bg-yellow-50 dark:bg-yellow-950/40 rounded-xl border border-yellow-300 dark:border-yellow-700 space-y-2">
-                                            <div className="font-bold text-yellow-900 dark:text-yellow-200 flex items-center gap-1.5 text-sm">
-                                                <span>📦 3. Gói Offline Đầy Đủ (Kèm PDF & Word)</span>
-                                            </div>
-                                            <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                                                Nhúng tất cả dữ liệu và tệp đính kèm vào 1 file HTML duy nhất để mở xem trên máy tính không cần Internet.
-                                            </p>
-                                            <button 
-                                                onClick={() => exportStandaloneWorkspace(false)}
-                                                className="w-full py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-900 rounded-lg font-bold shadow text-xs flex items-center justify-center gap-1.5 transition"
-                                            >
-                                                <span>📦</span>
-                                                <span>Tải Gói Offline Đầy Đủ</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-2.5 text-right">
-                                        <button onClick={() => setExportModal(false)} className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 text-xs font-bold">Đóng</button>
                                     </div>
                                 </div>
                             </div>
@@ -3458,7 +3206,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             </div>
                         )}
 
-                        {/* MODAL LỰA CHỌN TẢI FILE PHỤ LỤC */}
+                        {/* MODAL TẢI FILE PHỤ LỤC */}
                         {downloadChoiceModal.isOpen && downloadChoiceModal.app && (() => {
                             const app = downloadChoiceModal.app;
                             const hasPdf = Boolean(app.pdfFileUrl && String(app.pdfFileUrl).trim());
@@ -3561,64 +3309,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             );
                         })()}
 
-                        {/* MODAL RESET CSDL */}
-                        {resetModal && (
-                            <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-150">
-                                    <div className="bg-rose-700 text-white p-4 flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xl">🗑️</span>
-                                            <h3 className="text-sm font-bold">Quản lý & Xóa dữ liệu CSDL</h3>
-                                        </div>
-                                        <button onClick={() => setResetModal(false)} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                    </div>
-                                    <div className="p-4 space-y-4 text-xs">
-                                        <div>
-                                            <div className="font-bold text-slate-700 dark:text-slate-200 mb-2">1. Xóa vĩnh viễn từng tài liệu:</div>
-                                            <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
-                                                {savedRegistry && savedRegistry.filter(r => r.id !== 'main').map(item => {
-                                                    const isOpen = docs.some(d => d.id === item.id);
-                                                    return (
-                                                        <div key={item.id} className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                                            <div className="truncate pr-2">
-                                                                <span className="font-bold">{item.name}</span>
-                                                                <span className="ml-1.5 text-[10px] text-slate-400">({isOpen ? 'Đang mở' : 'Đã đóng'})</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-1">
-                                                                <button onClick={() => handleRenameDocument(item.id, item.name)} className="px-2 py-1 text-slate-500 hover:text-slate-800 font-semibold" title="Đổi tên">✏️</button>
-                                                                <button onClick={() => deleteSpecificDoc(item.id, item.name)} className="px-2.5 py-1 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-300 rounded font-bold shrink-0 border border-rose-200 dark:border-rose-800">Xóa</button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                                {(!savedRegistry || savedRegistry.filter(r => r.id !== 'main').length === 0) && (
-                                                    <div className="text-slate-400 italic text-center py-2">Chưa có tài liệu phụ nào được nạp.</div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {activeDocType === 'docx' && appendixCount > 0 && (
-                                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                                                <div className="font-bold text-amber-600 dark:text-amber-400 mb-1">2. Giải phóng dung lượng cho Tab hiện tại:</div>
-                                                <button onClick={handleClearAllAppendixFilesOfCurrentDoc} className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded-xl shadow">
-                                                    XÓA TẤT CẢ FILE PDF/WORD PHỤ LỤC ({appendixCount} MỤC)
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                                            <div className="font-bold text-rose-600 mb-1">3. Xóa sạch toàn bộ CSDL:</div>
-                                            <button onClick={clearAllDatabase} className="w-full py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow">XÓA TOÀN BỘ CSDL NGAY</button>
-                                        </div>
-                                    </div>
-                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-2.5 text-right">
-                                        <button onClick={() => setResetModal(false)} className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 text-xs font-bold text-slate-700 dark:text-slate-200">Đóng</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* MODAL CHỌN TÀI LIỆU ĐỂ SO SÁNH */}
+                        {/* MODAL SO SÁNH TÀI LIỆU */}
                         {compareSelectModal && (
                             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                                 <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in duration-150">
@@ -3646,8 +3337,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                             ))
                                         ) : (
                                             <div className="p-6 text-center text-xs text-slate-400 border border-dashed rounded-xl space-y-2">
-                                                <div>Cần nạp ít nhất 2 tài liệu Word (.docx) vào hệ thống để thực hiện so sánh.</div>
-                                                <button onClick={() => { setCompareSelectModal(false); openUploadMenu(); }} className="px-3 py-1.5 bg-aviation-600 text-white rounded-lg font-bold">➕ Nạp thêm tài liệu</button>
+                                                <div>Chưa có đủ 2 tài liệu Word (.docx) để thực hiện đối chiếu so sánh.</div>
                                             </div>
                                         )}
                                     </div>
@@ -3759,7 +3449,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                         📄 {compareModalState.sourceDocName} (Gốc)
                                                     </th>
                                                     <th className="p-3 w-[35%] font-bold border-r border-slate-300 dark:border-slate-700">
-                                                        📑 {compareModalState.targetDocName} (Tự chọn Điều khoản đối chiếu)
+                                                        📑 {compareModalState.targetDocName} (Chọn Điều khoản đối chiếu)
                                                     </th>
                                                     <th className="p-3 w-[35%] font-bold">
                                                         🤖 Đánh giá & Phân tích khác biệt (AI)
@@ -3884,114 +3574,15 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             </div>
                         )}
 
-                        {/* POPUP XEM CHI TIẾT KHÁC BIỆT */}
-                        {compareDetailModal.isOpen && compareDetailModal.row && (() => {
-                            const r = compareDetailModal.row;
-                            const targetArts = compareModalState.targetDocArticles || {};
-                            const selectedCodes = r.selectedCodesB || [];
-
-                            return (
-                                <div className="fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in zoom-in duration-150">
-                                    <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-5xl h-[88vh] shadow-2xl border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden">
-                                        <div className="bg-indigo-800 text-white p-3.5 flex justify-between items-center shrink-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-lg">🔍</span>
-                                                <h3 className="text-xs sm:text-sm font-bold truncate">Chi tiết đối chiếu: {r.codeA} ➔ {selectedCodes.length > 0 ? selectedCodes.join(', ') : '(Chưa chọn)'}</h3>
-                                            </div>
-                                            <button onClick={() => setCompareDetailModal({ isOpen: false, row: null })} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                        </div>
-                                        <div className="flex-1 overflow-auto p-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs custom-scrollbar">
-                                            <div className="p-3.5 rounded-xl border bg-slate-50 dark:bg-slate-800/70 space-y-2">
-                                                <div className="font-bold text-blue-600 text-xs border-b pb-1">📄 {compareModalState.sourceDocName} ({r.codeA})</div>
-                                                <div className="font-bold text-slate-800 dark:text-slate-100">{r.titleA}</div>
-                                                <div className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-[12px]">{r.textA || 'Trống'}</div>
-                                            </div>
-
-                                            <div className="p-3.5 rounded-xl border bg-slate-50 dark:bg-slate-800/70 space-y-3">
-                                                <div className="font-bold text-emerald-600 text-xs border-b pb-1">📑 {compareModalState.targetDocName} ({selectedCodes.join(', ') || 'Chưa chọn'})</div>
-                                                {selectedCodes.length > 0 ? (
-                                                    selectedCodes.map(code => {
-                                                        const art = Object.values(targetArts).find(a => (a.code && String(a.code).trim() === String(code).trim()) || (String(a.id).trim() === String(code).trim()));
-                                                        return (
-                                                            <div key={code} className="p-2.5 rounded-lg border bg-white dark:bg-slate-855 space-y-1">
-                                                                <div className="font-bold text-indigo-600 dark:text-indigo-300">{art ? art.title : `Mục ${code}`}</div>
-                                                                <div className="text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed text-[12px]">{art ? art.plainText : 'Không tìm thấy nội dung'}</div>
-                                                            </div>
-                                                        );
-                                                    })
-                                                ) : (
-                                                    <div className="text-slate-400 italic">Chưa chọn điều khoản đối chiếu nào từ Tài liệu B.</div>
-                                                )}
-                                            </div>
-
-                                            <div className="col-span-1 md:col-span-2 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/70 dark:bg-indigo-950/40 space-y-2.5">
-                                                <div className="font-extrabold text-indigo-900 dark:text-indigo-200 text-xs sm:text-sm flex items-center gap-1.5">
-                                                    <span>🤖 Đánh giá & Phân tích khác biệt chuyên sâu (AI):</span>
-                                                </div>
-                                                <div className="text-indigo-950 dark:text-indigo-100 leading-relaxed whitespace-pre-line font-medium text-xs">
-                                                    {r.aiAnalysis || 'Chưa có phân tích.'}
-                                                </div>
-                                                {r.detailedPoints && r.detailedPoints.length > 0 && (
-                                                    <ul className="list-disc pl-5 space-y-1 text-slate-700 dark:text-slate-300 text-xs">
-                                                        {r.detailedPoints.map((pt, pIdx) => (
-                                                            <li key={pIdx}>{pt}</li>
-                                                        ))}
-                                                    </ul>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="p-3 bg-slate-100 dark:bg-slate-800 border-t flex justify-end gap-2 shrink-0">
-                                            <button onClick={() => setCompareDetailModal({ isOpen: false, row: null })} className="px-4 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs font-bold hover:bg-slate-300">Đóng</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-
-                        {/* ROW 1: TABS TÀI LIỆU */}
+                        {/* ROW 1: TABS TÀI LIỆU (ĐÃ LOẠI BỎ CÁC NÚT THAY THẾ/NẠP TRONG CLIENT MODE) */}
                         <div className="bg-slate-900 px-3 pt-2 flex gap-1 overflow-x-auto custom-scrollbar border-b border-slate-700 no-print touch-pan-x">
                             {docs.map(d => (
                                 <div key={d.id} onClick={() => switchDoc(d.id)} className={`flex items-center gap-2 px-3 py-2 rounded-t-lg text-xs sm:text-sm cursor-pointer transition whitespace-nowrap shrink-0 group ${activeDocId === d.id ? 'bg-slate-50 text-aviation-800 font-bold dark:bg-slate-800 dark:text-white shadow-[0_-2px_10px_rgba(0,0,0,0.2)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}>
                                     <span>{d.type === 'pdf' ? '📄' : '📝'}</span>
                                     <span className="max-w-[180px] truncate font-semibold">{d.name}</span>
-                                    {!isStandaloneMode && (
+                                    {!isReaderClientMode && (
                                         <div className="flex items-center gap-1 ml-1.5 opacity-80 group-hover:opacity-100">
                                             <button onClick={(e) => { e.stopPropagation(); handleRenameDocument(d.id, d.name); }} className="hover:text-yellow-400 p-0.5" title="Đổi tên">✏️</button>
-                                            <label onClick={(e) => e.stopPropagation()} className="hover:text-emerald-400 hover:bg-emerald-900/50 rounded p-0.5 cursor-pointer transition" title="Nạp lại / Thay thế file cho Tab này">
-                                                <span>🔄</span>
-                                                <input type="file" accept=".docx,.pdf" className="hidden" onChange={async (e) => {
-                                                    const file = e.target.files[0];
-                                                    if (!file) return;
-                                                    const isPdf = file.name.toLowerCase().endsWith('.pdf');
-                                                    const isDocx = file.name.toLowerCase().endsWith('.docx');
-
-                                                    if (isPdf) {
-                                                        setImporting(true);
-                                                        notify(`Đang thay thế file PDF: ${file.name}...`);
-                                                        const reader = new FileReader();
-                                                        reader.onload = async (ev) => {
-                                                            await WorkspaceDB.put(d.id, { pdfUrl: ev.target.result, name: file.name });
-                                                            const updatedDocs = docs.map(item => item.id === d.id ? { ...item, name: file.name, type: 'pdf' } : item);
-                                                            setDocs(updatedDocs);
-                                                            await WorkspaceDB.put('docs_meta', updatedDocs);
-                                                            await refreshStoredRegistry();
-                                                            await loadDocData(d.id);
-                                                            setImporting(false);
-                                                            notify("✅ Đã thay thế file PDF thành công!");
-                                                        };
-                                                        reader.readAsDataURL(file);
-                                                    } else if (isDocx) {
-                                                        setImporting(true);
-                                                        notify(`Đang nạp lại dữ liệu cho tab "${file.name}"...`);
-                                                        const reader = new FileReader();
-                                                        reader.onload = (ev) => {
-                                                            processWordFileForDocx(ev.target.result, d.id === 'main', d.id, file.name, true);
-                                                        };
-                                                        reader.readAsArrayBuffer(file);
-                                                    }
-                                                    e.target.value = '';
-                                                }} />
-                                            </label>
                                             {d.id !== 'main' && (
                                                 <span onClick={(e) => { e.stopPropagation(); closeDoc(d.id); }} className="hover:text-red-500 rounded-full w-4 h-4 flex items-center justify-center font-bold text-base leading-none" title="Đóng tab">&times;</span>
                                             )}
@@ -3999,7 +3590,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                     )}
                                 </div>
                             ))}
-                            {!isStandaloneMode && (
+                            {!isReaderClientMode && (
                                 <button onClick={openUploadMenu} className="flex items-center gap-1 px-4 py-2 rounded-t-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold cursor-pointer shadow-lg ml-2 whitespace-nowrap shrink-0">
                                     <span>➕ Nạp tài liệu (Word/PDF)</span>
                                 </button>
@@ -4011,7 +3602,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3">
                                 <div>
                                     <h1 className="text-sm sm:text-base font-extrabold tracking-tight">
-                                        {isStandaloneMode ? 'HỆ THỐNG TRA CỨU QUY CHẾ & MANUALS HÀNG KHÔNG' : 'TRÌNH QUẢN TRỊ & ĐÓNG GÓI TÀI LIỆU HÀNG KHÔNG'}
+                                        HỆ THỐNG TRA CỨU QUY CHẾ & MANUALS HÀNG KHÔNG
                                     </h1>
                                     <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
                                         <span>Tài liệu đang xem:</span>
@@ -4021,6 +3612,16 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 </div>
 
                                 <div className="flex items-center gap-2 flex-wrap">
+                                    {/* NÚT CÀI ĐẶT ỨNG DỤNG PWA TRÊN ĐIỆN THOẠI/TABLET */}
+                                    <button 
+                                        onClick={handleInstallPwa}
+                                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow flex items-center gap-1.5 transition hover:scale-105"
+                                        title="Cài đặt ứng dụng lên màn hình chính điện thoại / máy tính"
+                                    >
+                                        <span>📲</span>
+                                        <span>Cài đặt App (PWA)</span>
+                                    </button>
+
                                     <button 
                                         onClick={handleDownloadOfflineData} 
                                         className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow flex items-center gap-1.5 transition hover:scale-105"
@@ -4054,38 +3655,35 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                         </>
                                     )}
 
-                                    {activeDocType === 'docx' && (
+                                    {activeDocType === 'docx' && docs.length > 1 && (
                                         <button
                                             onClick={() => setCompareSelectModal(true)}
-                                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow flex items-center gap-1.5 transition"
+                                            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow flex items-center gap-1.5 transition"
                                         >
                                             <span>⚖️</span>
                                             <span>So sánh tài liệu</span>
                                         </button>
                                     )}
 
-                                    {!isStandaloneMode && (
+                                    {/* CÁC NÚT QUẢN TRỊ NÀY CHỈ XUẤT HIỆN Ở WORKSPACE ADMIN GỐC, TỰ ĐỘNG BIẾN MẤT KHI LÊN GITHUB */}
+                                    {!isReaderClientMode && (
                                         <>
-                                            {docs && docs.length > 0 && (
-                                                <>
-                                                    <button 
-                                                        onClick={exportOnlineGithubWorkspace} 
-                                                        className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
-                                                        title="Tự động phân mảnh dữ liệu < 15MB để tải lên GitHub Pages"
-                                                    >
-                                                        <span>🌐</span>
-                                                        <span>Đóng gói Online (GitHub)</span>
-                                                    </button>
-                                                    <button 
-                                                        onClick={openExportModalWithStats} 
-                                                        className="px-2.5 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-400 text-slate-900 text-xs font-bold shadow flex items-center gap-1 transition"
-                                                        title="Đóng gói 1 file HTML duy nhất chạy Offline"
-                                                    >
-                                                        <span>📦</span>
-                                                        <span>Đóng gói Offline</span>
-                                                    </button>
-                                                </>
-                                            )}
+                                            <button 
+                                                onClick={exportOnlineGithubWorkspace} 
+                                                className="px-2.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow flex items-center gap-1 transition"
+                                                title="Tự động phân mảnh dữ liệu < 15MB để tải lên GitHub Pages"
+                                            >
+                                                <span>🌐</span>
+                                                <span>Đóng gói Online (GitHub)</span>
+                                            </button>
+                                            <button 
+                                                onClick={openExportModalWithStats} 
+                                                className="px-2.5 py-1.5 rounded-lg bg-yellow-500 hover:bg-yellow-400 text-slate-900 text-xs font-bold shadow flex items-center gap-1 transition"
+                                                title="Đóng gói 1 file HTML duy nhất chạy Offline"
+                                            >
+                                                <span>📦</span>
+                                                <span>Đóng gói Offline</span>
+                                            </button>
                                             <button onClick={openResetMenu} className="px-2.5 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-600 text-xs text-white font-bold shadow flex items-center gap-1">
                                                 <span>🗑️</span>
                                                 <span>Reset</span>
@@ -4156,7 +3754,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                     <span className="absolute left-3 top-2.5 text-slate-400">🔍</span>
                                                 </div>
                                                 <div className="flex items-center gap-3">
-                                                    {!isStandaloneMode && (
+                                                    {!isReaderClientMode && (
                                                         <button onClick={() => setAddAppendixModal({ isOpen: true, code: '', title: '', plainText: '', pdfName: '', pdfBase64: '', wordName: '', wordBase64: '' })} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1.5 shrink-0 transition">
                                                             <span>➕ Thêm Phụ lục</span>
                                                         </button>
@@ -4181,17 +3779,9 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                             <button onClick={() => { setJumpHistory(null); setSingleAppendixKey(null); }} className="text-xs text-aviation-600 font-bold hover:underline">&larr; Danh sách</button>
                                                             <div className="flex flex-wrap items-center gap-2">
                                                                 <button onClick={() => handleDownloadClick(app)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white shadow flex items-center gap-1">📥 Tải về</button>
-                                                                <button onClick={() => handleRenameAppendix(app.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 dark:bg-slate-750 text-slate-800 dark:text-slate-200 border">✏️ Sửa tên</button>
-                                                                {!isStandaloneMode && (
+                                                                {!isReaderClientMode && (
                                                                     <>
-                                                                        <label className="px-3 py-1.5 text-xs font-bold rounded-lg bg-red-600 text-white cursor-pointer shadow">
-                                                                            <span>📤 {app.pdfFileUrl ? 'Nạp lại PDF' : 'Nạp PDF'}</span>
-                                                                            <input type="file" accept=".pdf" className="hidden" onChange={(e) => { handleUploadAppendixPdf(app.id, e.target.files[0]); e.target.value = ''; }} />
-                                                                        </label>
-                                                                        <label className="px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white cursor-pointer shadow">
-                                                                            <span>📤 {app.wordFileUrl ? 'Nạp lại Word' : 'Nạp Word'}</span>
-                                                                            <input type="file" accept=".doc,.docx" className="hidden" onChange={(e) => { handleUploadAppendixWord(app.id, e.target.files[0]); e.target.value = ''; }} />
-                                                                        </label>
+                                                                        <button onClick={() => handleRenameAppendix(app.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 dark:bg-slate-750 text-slate-800 dark:text-slate-200 border">✏️ Sửa tên</button>
                                                                         <button onClick={() => handleDeleteAppendix(app.id)} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-rose-600 text-white shadow">🗑️ Xóa</button>
                                                                     </>
                                                                 )}
@@ -4219,7 +3809,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                             <div>
                                                                 <div className="flex justify-between items-center mb-1">
                                                                     <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded">{app.code}</span>
-                                                                    <button onClick={() => handleRenameAppendix(app.id)} className="text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" title="Đổi tên Phụ lục">✏️</button>
                                                                 </div>
                                                                 <h4 className="font-bold text-xs my-1.5 line-clamp-2">{app.title}</h4>
                                                             </div>
@@ -4253,29 +3842,22 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                     <div className="text-2xl font-bold text-blue-600 mt-1">{appendixCount} Mục</div>
                                                 </div>
                                                 <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border shadow-sm flex flex-col justify-center items-center">
-                                                    {!isStandaloneMode && activeDocId === 'main' && dataCount === 0 ? (
-                                                        <label className="cursor-pointer px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow hover:bg-emerald-500">
-                                                            ➕ Nạp dữ liệu tài liệu
-                                                            <input type="file" accept=".docx" className="hidden" onChange={handleMainUpload} />
-                                                        </label>
+                                                    {isGlobalTranslatedActive ? (
+                                                        <button 
+                                                            onClick={handleResetAllToOriginal} 
+                                                            className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-xs font-bold shadow flex items-center justify-center gap-1"
+                                                        >
+                                                            <span>🔄</span>
+                                                            <span>Quay về ngôn ngữ gốc</span>
+                                                        </button>
                                                     ) : (
-                                                        isGlobalTranslatedActive ? (
-                                                            <button 
-                                                                onClick={handleResetAllToOriginal} 
-                                                                className="w-full py-2 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg text-xs font-bold shadow flex items-center justify-center gap-1"
-                                                            >
-                                                                <span>🔄</span>
-                                                                <span>Quay về ngôn ngữ gốc</span>
-                                                            </button>
-                                                        ) : (
-                                                            <button 
-                                                                onClick={() => setLangSelectModal({ isOpen: true, mode: 'all', article: null })} 
-                                                                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow flex items-center justify-center gap-1"
-                                                            >
-                                                                <span>🌐</span>
-                                                                <span>Chuyển ngôn ngữ nhanh</span>
-                                                            </button>
-                                                        )
+                                                        <button 
+                                                            onClick={() => setLangSelectModal({ isOpen: true, mode: 'all', article: null })} 
+                                                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow flex items-center justify-center gap-1"
+                                                        >
+                                                            <span>🌐</span>
+                                                            <span>Chuyển ngôn ngữ nhanh</span>
+                                                        </button>
                                                     )}
                                                 </div>
                                             </div>
@@ -4513,7 +4095,10 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                             <span>Hỏi AI</span>
                                                         </button>
                                                         
-                                                        <button onClick={() => { setIsEditing(!isEditing); setEditContent(currentArticle.plainText || ''); }} className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white font-bold shadow">{isEditing ? '✕ Hủy' : '✏️ Edit'}</button>
+                                                        {!isReaderClientMode && (
+                                                            <button onClick={() => { setIsEditing(!isEditing); setEditContent(currentArticle.plainText || ''); }} className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white font-bold shadow">{isEditing ? '✕ Hủy' : '✏️ Edit'}</button>
+                                                        )}
+
                                                         <button onClick={() => toggleBm(currentArticle.id)} className={`px-3 py-1.5 text-xs rounded-lg border ${bookmarks.includes(currentArticle.id) ? 'bg-yellow-50 text-yellow-700' : ''}`}>{bookmarks.includes(currentArticle.id) ? '★ Đã lưu' : '☆ Lưu'}</button>
                                                     </div>
                                                 </div>

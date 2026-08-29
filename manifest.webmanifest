@@ -1,17 +1,25 @@
 {
+  "id": "./",
   "name": "Hệ Thống Tra Cứu Quy Chế Hàng Không",
   "short_name": "QuyChế HK",
-  "description": "Hệ thống tra cứu quy chế hàng không VARs, CAME, MOE & ICAO thông minh",
+  "description": "Hệ thống tra cứu quy chế an toàn hàng không VARs, CAME, MOE & ICAO thông minh",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#075985",
   "orientation": "any",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%23075985'/%3E%3Cpath d='M256 120 L380 400 L256 340 L132 400 Z' fill='%23ffffff'/%3E%3C/svg%3E",
-      "sizes": "192x192 512x512",
-      "type": "image/svg+xml",
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

@@ -522,12 +522,34 @@
             }
         }
 
-        const triggerFileDownload = (dataOrUrl, filename) => {
+        const triggerFileDownload = async (dataOrUrl, filename) => {
             if (!dataOrUrl) return;
             try {
-                let blob = null;
                 const cleanName = sanitizeFileName(filename);
+                if (typeof dataOrUrl === 'string' && (dataOrUrl.startsWith('http://') || dataOrUrl.startsWith('https://'))) {
+                    try {
+                        const res = await fetch(dataOrUrl);
+                        if (res.ok) {
+                            const blob = await res.blob();
+                            const blobUrl = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = blobUrl;
+                            a.download = cleanName;
+                            document.body.appendChild(a);
+                            a.click();
+                            setTimeout(() => {
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(blobUrl);
+                            }, 10000);
+                            return;
+                        }
+                    } catch (e) {
+                        window.open(dataOrUrl, '_blank');
+                        return;
+                    }
+                }
 
+                let blob = null;
                 if (dataOrUrl instanceof Blob) blob = dataOrUrl;
                 else if (typeof dataOrUrl === 'string') {
                     if (dataOrUrl.startsWith('blob:')) {
@@ -538,18 +560,7 @@
                         a.click();
                         document.body.removeChild(a);
                         return;
-                    } else if (dataOrUrl.startsWith('http://') || dataOrUrl.startsWith('https://')) {
-                        const a = document.createElement('a');
-                        a.href = dataOrUrl;
-                        a.target = '_blank';
-                        a.download = cleanName;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        return;
-                    } else {
-                        blob = dataURLtoBlob(dataOrUrl);
-                    }
+                    } else blob = dataURLtoBlob(dataOrUrl);
                 }
 
                 if (!blob) return;
@@ -2343,13 +2354,60 @@ ${scriptCode}
                     canvas.toBlob(blob => resolve(blob), 'image/png');
                 });
             };
+		const getAppendixOnlineUrls = (docName, app) => {
+            const norm = (docName || '').toLowerCase();
+            let num = null;
+            const numMatch = (app.code + ' ' + app.title).match(/\d+/);
+            if (numMatch) {
+                num = parseInt(numMatch[0], 10);
+            } else {
+                const rMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
+                if (rMatch) num = romanToDecimal(rMatch[1]);
+            }
+            const rMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
+            const roman = rMatch ? rMatch[1].toUpperCase() : (num ? decimalToRoman(num) : '');
+            const padded = num !== null ? String(num).padStart(2, '0') : '01';
 
+            let pdfUrl = "";
+            let pdfName = "";
+            let wordUrl = "";
+            let wordName = "";
+
+            if (norm.includes('221')) {
+                const isMau = (app.title || '').toLowerCase().includes('mẫu') || String(app.code || '').toLowerCase().includes('mẫu');
+                if (isMau && num !== null) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`;
+                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Mau_${padded}.docx`;
+                    wordName = `Mau_${padded}.docx`;
+                } else if (roman) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_${roman}.pdf`;
+                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_${roman}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Phu_luc_${num || 1}.docx`;
+                    wordName = `Phu_luc_${num || 1}.docx`;
+                }
+            } else if (norm.includes('223')) {
+                if (num !== null && num <= 27) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Pdf/ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${padded}.pdf`;
+                    pdfName = `ND_223_2026_NĐ-CP_Phu Luc_Mau ${padded}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Word/Mau_So_${padded}.docx`;
+                    wordName = `Mau_So_${padded}.docx`;
+                }
+            } else if (norm.includes('boqc') || norm.includes('quy chế') || (!norm.includes('came') && !norm.includes('mme') && !norm.includes('moe'))) {
+                if (roman) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Pdf/BoQCATHK_PHU%20LUC_${roman}.pdf`;
+                    pdfName = `BoQCATHK_PHU LUC_${roman}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Word/BoQCATHK_Phu%20Luc_Phu_luc_${roman}.docx`;
+                    wordName = `BoQCATHK_Phu Luc_Phu_luc_${roman}.docx`;
+                }
+            }
+
+            return { pdfUrl, pdfName, wordUrl, wordName };
+        };
             const exportOnlineGithubWorkspace = async () => {
                 try {
-                    notify("🌐 Đang quét sạch rác & ép dung lượng xuống dưới 1MB...");
+                    notify("🌐 Đang liên kết URL GitHub & tối ưu dữ liệu Online...");
 
-                    // 1. CHỈ LẤY CÁC TÀI LIỆU ĐANG MỞ TRÊN TAB (Loại bỏ toàn bộ tài liệu cũ/đã xóa còn sót trong máy)
-                    const activeDocIds = new Set(docs.map(d => d.id));
                     const packageMeta = docs.map(d => ({ ...d }));
                     const packageData = {};
 
@@ -2368,40 +2426,34 @@ ${scriptCode}
                         return;
                     }
 
-                    // 2. THUẬT TOÁN DEEP-CLEAN: QUÉT & TRIỆT TIÊU 100% CHUỖI BASE64/BINARY NẶNG
-                    const deepCleanBase64 = (val) => {
-                        if (typeof val === 'string') {
-                            // Nếu là chuỗi data URL (ảnh, pdf, docx) hoặc chuỗi base64 dài > 300 ký tự không phải link web
-                            if (val.startsWith('data:') || (val.length > 300 && !val.startsWith('http://') && !val.startsWith('https://') && !val.includes(' ') && !val.includes('\n'))) {
-                                return "";
-                            }
-                            // Nếu HTML có ảnh nhúng base64 -> Xóa chuỗi data để giảm dung lượng
-                            if (val.includes('data:image/') || val.includes('data:application/')) {
-                                return val.replace(/src=["']data:[^"']+["']/gi, 'src=""');
-                            }
-                            return val;
-                        }
-                        if (Array.isArray(val)) {
-                            return val.map(deepCleanBase64);
-                        }
-                        if (val !== null && typeof val === 'object') {
-                            const cleaned = {};
-                            for (const k in val) {
-                                // Xóa bỏ hoàn toàn chuỗi base64 của file PDF/Word đính kèm
-                                if ((k === 'pdfUrl' || k === 'pdfFileUrl' || k === 'wordFileUrl') && typeof val[k] === 'string' && !val[k].startsWith('http')) {
-                                    cleaned[k] = "";
-                                } else {
-                                    cleaned[k] = deepCleanBase64(val[k]);
+                    // TỰ ĐỘNG GẮN LINK ONLINE GITHUB CHO CÁC PHỤ LỤC & XÓA BASE64 NẶNG
+                    const optimizedData = JSON.parse(JSON.stringify(packageData));
+                    Object.keys(optimizedData).forEach(docKey => {
+                        const pkg = optimizedData[docKey];
+                        if (pkg && pkg.appendices) {
+                            Object.keys(pkg.appendices).forEach(appKey => {
+                                const app = pkg.appendices[appKey];
+                                const online = getAppendixOnlineUrls(pkg.name, app);
+
+                                // Gán đường link Online trực tiếp từ GitHub
+                                if (online.pdfUrl) {
+                                    app.pdfFileUrl = online.pdfUrl;
+                                    app.pdfFileName = online.pdfName;
+                                } else if (app.pdfFileUrl && app.pdfFileUrl.startsWith('data:')) {
+                                    app.pdfFileUrl = "";
                                 }
-                            }
-                            return cleaned;
+
+                                if (online.wordUrl) {
+                                    app.wordFileUrl = online.wordUrl;
+                                    app.wordFileName = online.wordName;
+                                } else if (app.wordFileUrl && app.wordFileUrl.startsWith('data:')) {
+                                    app.wordFileUrl = "";
+                                }
+                            });
                         }
-                        return val;
-                    };
+                    });
 
-                    const optimizedData = deepCleanBase64(packageData);
-
-                    // 3. Phân mảnh chuỗi dữ liệu nhẹ
+                    // Phân mảnh chuỗi dữ liệu nhẹ
                     const fullDataString = JSON.stringify(optimizedData);
                     const CHUNK_CHAR_LIMIT = 5 * 1024 * 1024;
                     const chunks = [];
@@ -2411,7 +2463,7 @@ ${scriptCode}
 
                     const partFileNames = chunks.map((_, idx) => `data_part_${idx + 1}.json`);
 
-                    // 4. Xuất Icons PWA
+                    // 1. Xuất Icons PWA
                     const icon192 = await generatePwaIconBlob(192);
                     triggerFileDownload(icon192, 'icon-192.png');
 
@@ -2420,7 +2472,7 @@ ${scriptCode}
                         triggerFileDownload(icon512, 'icon-512.png');
                     }, 200);
 
-                    // 5. Xuất manifest.webmanifest
+                    // 2. Xuất manifest.webmanifest
                     const pwaManifestContent = {
                         id: "./",
                         name: "Hệ Thống Tra Cứu Quy Chế Hàng Không",
@@ -2440,7 +2492,7 @@ ${scriptCode}
                     const pwaBlob = new Blob([JSON.stringify(pwaManifestContent, null, 2)], { type: 'application/manifest+json;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(pwaBlob, 'manifest.webmanifest'), 400);
 
-                    // 6. Xuất Service Worker chống dính cache cũ
+                    // 3. Xuất Service Worker
                     const cacheVersion = 'aviation-reg-cache-v' + Date.now();
                     const swContent = `// Service Worker tự động làm mới cache
 const CACHE_NAME = '${cacheVersion}';
@@ -2485,7 +2537,7 @@ self.addEventListener('fetch', (e) => {
                     const swBlob = new Blob([swContent], { type: 'application/javascript;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(swBlob, 'sw.js'), 600);
 
-                    // 7. Xuất data_manifest.json
+                    // 4. Xuất data_manifest.json
                     const manifestContent = {
                         meta: packageMeta,
                         files: partFileNames,
@@ -2495,7 +2547,7 @@ self.addEventListener('fetch', (e) => {
                     const manifestBlob = new Blob([JSON.stringify(manifestContent, null, 2)], { type: 'application/json;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(manifestBlob, 'data_manifest.json'), 800);
 
-                    // 8. Xuất data_part_1.json siêu nhẹ
+                    // 5. Xuất data_part_1.json
                     chunks.forEach((chunkStr, idx) => {
                         setTimeout(() => {
                             const chunkPayload = JSON.stringify({ index: idx, chunk: chunkStr });
@@ -2504,7 +2556,7 @@ self.addEventListener('fetch', (e) => {
                         }, 1000 + idx * 300);
                     });
 
-                    // 9. Xuất index.html
+                    // 6. Xuất index.html
                     const scriptBabel = document.querySelector('script[type="text/babel"]');
                     let scriptCode = scriptBabel ? scriptBabel.textContent : '';
                     scriptCode = scriptCode.replace(/<\/script/gi, '<\\/script');
@@ -2579,8 +2631,7 @@ ${scriptCode}
                     }, 1200 + chunks.length * 300);
 
                     setExportModal(false);
-                    const sizeInKB = Math.round(fullDataString.length / 1024);
-                    alert(`🎉 ĐÓNG GÓI ONLINE THÀNH CÔNG!\n\nTổng dung lượng Data sau khi nén: ~${sizeInKB} KB (Chỉ gồm đúng ${docs.length} tài liệu đang mở, đã lọc sạch 100% Base64 nặng).`);
+                    alert("🎉 ĐÃ ĐÓNG GÓI ONLINE THÀNH CÔNG!\n\nToàn bộ phụ lục đã được liên kết với file PDF/Word tương ứng trên GitHub. Bạn hãy upload bộ file vừa tải về lên GitHub Pages!");
                 } catch (e) {
                     alert("Lỗi xuất gói Online: " + e.message);
                 }

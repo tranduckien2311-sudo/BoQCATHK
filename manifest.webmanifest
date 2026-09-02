@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "Hệ Thống Tra Cứu Quy Chế Hàng Không",
+  "short_name": "QuyChế HK",
+  "description": "Hệ thống tra cứu quy chế an toàn hàng không VARs, CAME, MOE, MME, IOSA",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#075985",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

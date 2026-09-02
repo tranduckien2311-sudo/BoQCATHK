@@ -2,27 +2,37 @@
   "meta": [
     {
       "id": "main",
-      "name": "BoQCATHK_Banhanh_VuVTfinal.docx",
+      "name": "BoQCATHK_Banhanh.docx",
       "type": "docx"
     },
     {
-      "id": "doc_1787408232795",
+      "id": "doc_1788320579247",
       "name": "ND_221_2026_NĐ-CP.docx",
       "type": "docx"
     },
     {
-      "id": "doc_1787408254658",
+      "id": "doc_1788324137431",
       "name": "ND so_223_2026_NĐ-CP.docx",
       "type": "docx"
     },
     {
-      "id": "doc_1787408270487",
+      "id": "doc_1788324187763",
+      "name": "MME_Iss05Rev12_29Apr2026.docx",
+      "type": "docx"
+    },
+    {
+      "id": "doc_1788363998678",
       "name": "LuatHK_130_2025_QH15.docx",
       "type": "docx"
     },
     {
-      "id": "doc_1787632969907",
-      "name": "MME_Iss05Rev12_29Apr2026.docx",
+      "id": "doc_1788364015441",
+      "name": "ism-mnt-en.docx",
+      "type": "docx"
+    },
+    {
+      "id": "doc_1788366867788",
+      "name": "ism-org-en.docx",
       "type": "docx"
     }
   ],
@@ -37,5 +47,5 @@
     "data_part_8.json"
   ],
   "totalParts": 8,
-  "exportedAt": "2026-08-29T16:09:20.843Z"
+  "exportedAt": "2026-09-02T16:56:57.883Z"
 }

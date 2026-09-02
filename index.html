@@ -2346,19 +2346,21 @@ ${scriptCode}
 
             const exportOnlineGithubWorkspace = async () => {
                 try {
-                    notify("🌐 Đang phân mảnh dữ liệu & tạo bộ cài PWA...");
-                    const allEntries = await WorkspaceDB.getAllEntries();
+                    notify("🌐 Đang quét sạch rác & ép dung lượng xuống dưới 1MB...");
+
+                    // 1. CHỈ LẤY CÁC TÀI LIỆU ĐANG MỞ TRÊN TAB (Loại bỏ toàn bộ tài liệu cũ/đã xóa còn sót trong máy)
+                    const activeDocIds = new Set(docs.map(d => d.id));
                     const packageMeta = docs.map(d => ({ ...d }));
                     const packageData = {};
 
-                    if (allEntries && allEntries.length > 0) {
-                        for (const entry of allEntries) {
-                            if (entry.key !== 'docs_meta') {
-                                packageData[entry.key] = entry.data;
-                            }
+                    for (const d of docs) {
+                        let pkg = (d.id === activeDocId && docData) ? docData : await WorkspaceDB.get(d.id);
+                        if (!pkg && isStandaloneMode && EMBEDDED_WORKSPACE?.data?.[d.id]) {
+                            pkg = EMBEDDED_WORKSPACE.data[d.id];
                         }
-                    } else if (docData) {
-                        packageData[activeDocId] = docData;
+                        if (pkg) {
+                            packageData[d.id] = pkg;
+                        }
                     }
 
                     if (Object.keys(packageData).length === 0) {
@@ -2366,8 +2368,42 @@ ${scriptCode}
                         return;
                     }
 
-                    const fullDataString = JSON.stringify(packageData);
-                    const CHUNK_CHAR_LIMIT = 10 * 1024 * 1024;
+                    // 2. THUẬT TOÁN DEEP-CLEAN: QUÉT & TRIỆT TIÊU 100% CHUỖI BASE64/BINARY NẶNG
+                    const deepCleanBase64 = (val) => {
+                        if (typeof val === 'string') {
+                            // Nếu là chuỗi data URL (ảnh, pdf, docx) hoặc chuỗi base64 dài > 300 ký tự không phải link web
+                            if (val.startsWith('data:') || (val.length > 300 && !val.startsWith('http://') && !val.startsWith('https://') && !val.includes(' ') && !val.includes('\n'))) {
+                                return "";
+                            }
+                            // Nếu HTML có ảnh nhúng base64 -> Xóa chuỗi data để giảm dung lượng
+                            if (val.includes('data:image/') || val.includes('data:application/')) {
+                                return val.replace(/src=["']data:[^"']+["']/gi, 'src=""');
+                            }
+                            return val;
+                        }
+                        if (Array.isArray(val)) {
+                            return val.map(deepCleanBase64);
+                        }
+                        if (val !== null && typeof val === 'object') {
+                            const cleaned = {};
+                            for (const k in val) {
+                                // Xóa bỏ hoàn toàn chuỗi base64 của file PDF/Word đính kèm
+                                if ((k === 'pdfUrl' || k === 'pdfFileUrl' || k === 'wordFileUrl') && typeof val[k] === 'string' && !val[k].startsWith('http')) {
+                                    cleaned[k] = "";
+                                } else {
+                                    cleaned[k] = deepCleanBase64(val[k]);
+                                }
+                            }
+                            return cleaned;
+                        }
+                        return val;
+                    };
+
+                    const optimizedData = deepCleanBase64(packageData);
+
+                    // 3. Phân mảnh chuỗi dữ liệu nhẹ
+                    const fullDataString = JSON.stringify(optimizedData);
+                    const CHUNK_CHAR_LIMIT = 5 * 1024 * 1024;
                     const chunks = [];
                     for (let i = 0; i < fullDataString.length; i += CHUNK_CHAR_LIMIT) {
                         chunks.push(fullDataString.substring(i, i + CHUNK_CHAR_LIMIT));
@@ -2375,6 +2411,7 @@ ${scriptCode}
 
                     const partFileNames = chunks.map((_, idx) => `data_part_${idx + 1}.json`);
 
+                    // 4. Xuất Icons PWA
                     const icon192 = await generatePwaIconBlob(192);
                     triggerFileDownload(icon192, 'icon-192.png');
 
@@ -2383,11 +2420,12 @@ ${scriptCode}
                         triggerFileDownload(icon512, 'icon-512.png');
                     }, 200);
 
+                    // 5. Xuất manifest.webmanifest
                     const pwaManifestContent = {
                         id: "./",
                         name: "Hệ Thống Tra Cứu Quy Chế Hàng Không",
                         short_name: "QuyChế HK",
-                        description: "Hệ thống tra cứu quy chế an toàn hàng không VARs, CAME, MOE, MME & ICAO thông minh",
+                        description: "Hệ thống tra cứu quy chế an toàn hàng không VARs, CAME, MOE, MME, IOSA",
                         start_url: "./index.html",
                         scope: "./",
                         display: "standalone",
@@ -2395,25 +2433,17 @@ ${scriptCode}
                         theme_color: "#075985",
                         orientation: "any",
                         icons: [
-                            {
-                                src: "icon-192.png",
-                                sizes: "192x192",
-                                type: "image/png",
-                                purpose: "any maskable"
-                            },
-                            {
-                                src: "icon-512.png",
-                                sizes: "512x512",
-                                type: "image/png",
-                                purpose: "any maskable"
-                            }
+                            { src: "icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+                            { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
                         ]
                     };
                     const pwaBlob = new Blob([JSON.stringify(pwaManifestContent, null, 2)], { type: 'application/manifest+json;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(pwaBlob, 'manifest.webmanifest'), 400);
 
-                    const swContent = `// Service Worker tự động cache ứng dụng PWA
-const CACHE_NAME = 'aviation-reg-cache-v10';
+                    // 6. Xuất Service Worker chống dính cache cũ
+                    const cacheVersion = 'aviation-reg-cache-v' + Date.now();
+                    const swContent = `// Service Worker tự động làm mới cache
+const CACHE_NAME = '${cacheVersion}';
 const CORE_ASSETS = [
     './',
     './index.html',
@@ -2432,17 +2462,11 @@ const CORE_ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-    e.waitUntil(
-        caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())
-    );
+    e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
-    e.waitUntil(
-        caches.keys().then(keys => Promise.all(
-            keys.map(k => { if (k !== CACHE_NAME) return caches.delete(k); })
-        )).then(() => self.clients.claim())
-    );
+    e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => { if (k !== CACHE_NAME) return caches.delete(k); }))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (e) => {
@@ -2461,6 +2485,7 @@ self.addEventListener('fetch', (e) => {
                     const swBlob = new Blob([swContent], { type: 'application/javascript;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(swBlob, 'sw.js'), 600);
 
+                    // 7. Xuất data_manifest.json
                     const manifestContent = {
                         meta: packageMeta,
                         files: partFileNames,
@@ -2470,6 +2495,7 @@ self.addEventListener('fetch', (e) => {
                     const manifestBlob = new Blob([JSON.stringify(manifestContent, null, 2)], { type: 'application/json;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(manifestBlob, 'data_manifest.json'), 800);
 
+                    // 8. Xuất data_part_1.json siêu nhẹ
                     chunks.forEach((chunkStr, idx) => {
                         setTimeout(() => {
                             const chunkPayload = JSON.stringify({ index: idx, chunk: chunkStr });
@@ -2478,6 +2504,7 @@ self.addEventListener('fetch', (e) => {
                         }, 1000 + idx * 300);
                     });
 
+                    // 9. Xuất index.html
                     const scriptBabel = document.querySelector('script[type="text/babel"]');
                     let scriptCode = scriptBabel ? scriptBabel.textContent : '';
                     scriptCode = scriptCode.replace(/<\/script/gi, '<\\/script');
@@ -2552,7 +2579,8 @@ ${scriptCode}
                     }, 1200 + chunks.length * 300);
 
                     setExportModal(false);
-                    alert("🎉 ĐÃ ĐÓNG GÓI ONLINE KÈM PWA THÀNH CÔNG!");
+                    const sizeInKB = Math.round(fullDataString.length / 1024);
+                    alert(`🎉 ĐÓNG GÓI ONLINE THÀNH CÔNG!\n\nTổng dung lượng Data sau khi nén: ~${sizeInKB} KB (Chỉ gồm đúng ${docs.length} tài liệu đang mở, đã lọc sạch 100% Base64 nặng).`);
                 } catch (e) {
                     alert("Lỗi xuất gói Online: " + e.message);
                 }

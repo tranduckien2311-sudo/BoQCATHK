@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Hệ Thống Tra Cứu Quy Chế Hàng Không",
   "short_name": "QuyChế HK",
-  "description": "Hệ thống tra cứu quy chế an toàn hàng không VARs, CAME, MOE, MME & ICAO thông minh",
+  "description": "Hệ thống tra cứu quy chế an toàn hàng không VARs, CAME, MOE, MME, IOSA",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -1,5 +1,5 @@
 // Service Worker tự động làm mới cache
-const CACHE_NAME = 'aviation-reg-cache-v1788423528994';
+const CACHE_NAME = 'aviation-reg-cache-v1788433382166';
 const CORE_ASSETS = [
     './',
     './index.html',

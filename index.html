@@ -1351,10 +1351,17 @@
                             const fullOnlineBundle = { meta: manifest.meta, data: combinedData };
                             setOnlineWorkspaceData(fullOnlineBundle);
                             setDocs(manifest.meta);
+
+                            // LƯU TOÀN BỘ TÀI LIỆU VÀO CSDL ĐỂ CHUYỂN TAB KHÔNG BỊ MẤT NỘI DUNG
+                            await WorkspaceDB.put('docs_meta', manifest.meta);
+                            for (const docKey of Object.keys(combinedData)) {
+                                await WorkspaceDB.put(docKey, combinedData[docKey]);
+                            }
+
                             const firstId = manifest.meta[0]?.id || 'main';
                             await loadDocData(firstId, fullOnlineBundle);
                             await refreshStoredRegistry();
-                            notify("✅ Đã nạp thành công dữ liệu chuẩn từ GitHub!");
+                            notify("✅ Đã nạp thành công toàn bộ dữ liệu chuẩn từ GitHub!");
                             return true;
                         }
                     }
@@ -1398,11 +1405,15 @@
 
                 if (overrideSource && overrideSource.data) {
                     pkg = overrideSource.data[docId];
-                } else {
+                }
+                if (!pkg) {
                     pkg = await WorkspaceDB.get(docId);
-                    if (!pkg && isStandaloneMode && EMBEDDED_WORKSPACE?.data?.[docId]) {
-                        pkg = EMBEDDED_WORKSPACE.data[docId];
-                    }
+                }
+                if (!pkg && onlineWorkspaceData && onlineWorkspaceData.data) {
+                    pkg = onlineWorkspaceData.data[docId];
+                }
+                if (!pkg && isStandaloneMode && EMBEDDED_WORKSPACE?.data) {
+                    pkg = EMBEDDED_WORKSPACE.data[docId];
                 }
 
                 if (pkg && (pkg.articles || pkg.pdfUrl)) {
@@ -2355,17 +2366,42 @@ ${scriptCode}
                 });
             };
 		const getAppendixOnlineUrls = (docName, app) => {
-            const norm = (docName || '').toLowerCase();
-            let num = null;
-            const numMatch = (app.code + ' ' + app.title).match(/\d+/);
-            if (numMatch) {
-                num = parseInt(numMatch[0], 10);
-            } else {
-                const rMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
-                if (rMatch) num = romanToDecimal(rMatch[1]);
+            if (!app) return { pdfUrl: "", pdfName: "", wordUrl: "", wordName: "" };
+            const norm = String(docName || '').toLowerCase();
+            
+            // Nếu là Manuals CAME, MME, MOE, IOSA, SMM -> Không phải BoQC/ND
+            if (/(?:came|moe|mme|manual|smm|om|sop|handbook|iosa|ism)/i.test(norm)) {
+                return { pdfUrl: "", pdfName: "", wordUrl: "", wordName: "" };
             }
-            const rMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
-            const roman = rMatch ? rMatch[1].toUpperCase() : (num ? decimalToRoman(num) : '');
+
+            const rawCode = String(app.code || '').trim();
+            const rawTitle = String(app.title || '').trim();
+
+            let num = null;
+            const codeNumMatch = rawCode.match(/\d+/);
+            const titleNumMatch = rawTitle.match(/(?:mẫu\s*số|mẫu|phụ\s*lục|pl)\s*(\d+)/i) || rawTitle.match(/\d+/);
+            if (codeNumMatch) {
+                num = parseInt(codeNumMatch[0], 10);
+            } else if (titleNumMatch) {
+                num = parseInt(titleNumMatch[1] || titleNumMatch[0], 10);
+            }
+
+            let roman = "";
+            if (rawCode && /^[IVXLCDM]+$/i.test(rawCode)) {
+                roman = rawCode.toUpperCase();
+            } else {
+                const romanMatch = rawTitle.match(/(?:phụ\s*lục|pl|appendix)\s+([IVXLCDM]+)\b/i);
+                if (romanMatch) {
+                    roman = romanMatch[1].toUpperCase();
+                } else if (num && num > 0 && num <= 63) {
+                    roman = decimalToRoman(num);
+                }
+            }
+
+            if (!num && roman) {
+                num = romanToDecimal(roman);
+            }
+
             const padded = num !== null ? String(num).padStart(2, '0') : '01';
 
             let pdfUrl = "";
@@ -2374,7 +2410,7 @@ ${scriptCode}
             let wordName = "";
 
             if (norm.includes('221')) {
-                const isMau = (app.title || '').toLowerCase().includes('mẫu') || String(app.code || '').toLowerCase().includes('mẫu');
+                const isMau = rawTitle.toLowerCase().includes('mẫu') || rawCode.toLowerCase().includes('mẫu');
                 if (isMau && num !== null) {
                     pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`;
                     pdfName = `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf`;
@@ -2393,7 +2429,7 @@ ${scriptCode}
                     wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Word/Mau_So_${padded}.docx`;
                     wordName = `Mau_So_${padded}.docx`;
                 }
-            } else if (norm.includes('boqc') || norm.includes('quy chế') || (!norm.includes('came') && !norm.includes('mme') && !norm.includes('moe'))) {
+            } else if (norm.includes('boqc') || norm.includes('quy chế') || norm.includes('chính') || norm.includes('banhanh') || norm === 'main') {
                 if (roman) {
                     pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Pdf/BoQCATHK_PHU%20LUC_${roman}.pdf`;
                     pdfName = `BoQCATHK_PHU LUC_${roman}.pdf`;
@@ -2404,7 +2440,8 @@ ${scriptCode}
 
             return { pdfUrl, pdfName, wordUrl, wordName };
         };
-            const exportOnlineGithubWorkspace = async () => {
+            
+			const exportOnlineGithubWorkspace = async () => {
                 try {
                     notify("🌐 Đang liên kết URL GitHub & tối ưu dữ liệu Online...");
 

@@ -703,10 +703,12 @@
         // =========================================================================
         // UNIVERSAL PDF VIEWER (XỬ LÝ AN TOÀN URL GITHUB & BASE64)
         // =========================================================================
-        function PdfPageItem({ pdfDoc, pageNum, scale, isHighlighted }) {
+        function PdfPageItem({ pdfDoc, pageNum, scale, isCurrentPageMatch, searchQuery }) {
             const canvasRef = React.useRef(null);
             const renderTaskRef = React.useRef(null);
+            const [highlights, setHighlights] = React.useState([]);
 
+            // 1. Render trang PDF lên Canvas
             React.useEffect(() => {
                 if (!pdfDoc) return;
                 let isCancelled = false;
@@ -735,22 +737,109 @@
 
                 return () => {
                     isCancelled = true;
-                    if (renderTaskRef.current) {
-                        renderTaskRef.current.cancel();
-                    }
+                    if (renderTaskRef.current) renderTaskRef.current.cancel();
                 };
             }, [pdfDoc, pageNum, scale]);
+
+            // 2. Tính toán tọa độ để HIGHLIGHT CHÍNH XÁC TỪ KHÓA trên mặt chữ
+            React.useEffect(() => {
+                if (!pdfDoc || !searchQuery || !searchQuery.trim()) {
+                    setHighlights([]);
+                    return;
+                }
+
+                let isCancelled = false;
+                const q = searchQuery.trim().toLowerCase();
+
+                pdfDoc.getPage(pageNum).then(async (page) => {
+                    const textContent = await page.getTextContent();
+                    if (isCancelled) return;
+
+                    const cssViewport = page.getViewport({ scale: scale });
+                    const boxes = [];
+
+                    for (const item of textContent.items) {
+                        const str = item.str || '';
+                        const lowerStr = str.toLowerCase();
+                        let startIdx = 0;
+
+                        while ((startIdx = lowerStr.indexOf(q, startIdx)) !== -1) {
+                            const itemX = item.transform[4];
+                            const itemY = item.transform[5];
+                            const itemWidth = item.width || (str.length * 8);
+                            const itemHeight = item.height || Math.abs(item.transform[3]) || 10;
+
+                            const charWidth = itemWidth / (str.length || 1);
+                            const subX = itemX + (startIdx * charWidth);
+                            const subWidth = Math.max(q.length * charWidth, 12);
+
+                            const rect = [subX, itemY, subX + subWidth, itemY + itemHeight];
+                            const viewRect = cssViewport.convertToViewportRectangle(rect);
+
+                            const left = Math.min(viewRect[0], viewRect[2]);
+                            const top = Math.min(viewRect[1], viewRect[3]);
+                            const width = Math.abs(viewRect[0] - viewRect[2]);
+                            const height = Math.abs(viewRect[1] - viewRect[3]);
+
+                            boxes.push({
+                                key: `${pageNum}_${boxes.length}`,
+                                left,
+                                top,
+                                width,
+                                height
+                            });
+
+                            startIdx += q.length;
+                        }
+                    }
+
+                    if (!isCancelled) {
+                        setHighlights(boxes);
+                    }
+                });
+
+                return () => { isCancelled = true; };
+            }, [pdfDoc, pageNum, scale, searchQuery]);
 
             return (
                 <div 
                     id={`pdf-page-item-${pageNum}`} 
                     data-page-num={pageNum} 
-                    className={`pdf-page-wrapper flex flex-col items-center mb-4 transition-all ${isHighlighted ? 'ring-4 ring-yellow-400 p-1 rounded-xl bg-yellow-100/40 shadow-2xl' : ''}`}
+                    className={`pdf-page-wrapper relative flex flex-col items-center mb-6 transition-all ${
+                        isCurrentPageMatch ? 'ring-4 ring-amber-400 p-1 rounded-xl bg-amber-500/10 shadow-2xl' : ''
+                    }`}
                 >
                     <div className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mb-1 select-none">
-                        Trang {pageNum}
+                        Trang {pageNum} {highlights.length > 0 && <span className="text-amber-500 font-bold">({highlights.length} từ khớp)</span>}
                     </div>
-                    <canvas ref={canvasRef} className="shadow-lg rounded-lg bg-white block max-w-full" />
+
+                    <div className="relative inline-block">
+                        <canvas 
+                            ref={canvasRef} 
+                            className="shadow-xl rounded-lg bg-white block max-w-none border border-slate-200 dark:border-slate-700" 
+                        />
+
+                        {/* LỚP PHỦ HIGHLIGHT TRỰC TIẾP TRÊN TỪNG TỪ KHÓA */}
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg">
+                            {highlights.map((h) => (
+                                <div
+                                    key={h.key}
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${h.left}px`,
+                                        top: `${h.top}px`,
+                                        width: `${h.width}px`,
+                                        height: `${h.height}px`,
+                                    }}
+                                    className={`mix-blend-multiply rounded-xs transition-all ${
+                                        isCurrentPageMatch
+                                            ? 'bg-amber-300/60 border border-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)] animate-pulse'
+                                            : 'bg-yellow-300/40 border border-yellow-400'
+                                    }`}
+                                />
+                            ))}
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -794,7 +883,7 @@
                                 const arrayBuf = await res.arrayBuffer();
                                 docSource = { data: new Uint8Array(arrayBuf) };
                             } catch (e) {
-                                console.warn("Fetch trực tiếp không thành công, thử nạp trực tiếp link:", e);
+                                console.warn("Fetch trực tiếp không thành công, thử nạp qua link:", e);
                                 docSource = base64Data;
                             }
                         } else if (typeof base64Data === 'string' && (base64Data.startsWith('data:') || /^[A-Za-z0-9+/=\s\r\n]+$/.test(base64Data.substring(0, 100)))) {
@@ -864,7 +953,7 @@
                 const handleWheelZoom = (e) => {
                     if (e.shiftKey || e.ctrlKey || e.metaKey) {
                         e.preventDefault();
-                        const delta = e.deltaY < 0 ? 0.12 : -0.12;
+                        const delta = e.deltaY < 0 ? 0.15 : -0.15;
                         setScale(s => Math.min(4.0, Math.max(0.4, Number((s + delta).toFixed(2)))));
                     }
                 };
@@ -958,7 +1047,8 @@
 
             return (
                 <div className="flex flex-col h-full bg-slate-100 dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 shadow-lg select-none">
-                    <div className="bg-slate-800 text-white p-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    {/* THANH ĐIỀU KHIỂN TOP BAR */}
+                    <div className="bg-slate-800 text-white p-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-10">
                         <div className="flex items-center gap-2">
                             <span className="font-bold truncate max-w-[120px] sm:max-w-xs">{fileName || title || 'Xem PDF'}</span>
                             {numPages > 0 && (
@@ -982,9 +1072,9 @@
                             </button>
 
                             <div className="flex items-center bg-slate-700 rounded overflow-hidden">
-                                <button onClick={zoomOut} className="px-2 py-1 hover:bg-slate-600 font-bold" title="Thu nhỏ (Shift + Cuộn chuột)">-</button>
-                                <button onClick={zoomReset} className="px-2 py-1 hover:bg-slate-600 font-semibold text-[10px] text-yellow-300 min-w-[42px] text-center" title="Đặt lại zoom">{Math.round(scale * 100)}%</button>
-                                <button onClick={zoomIn} className="px-2 py-1 hover:bg-slate-600 font-bold" title="Phóng to (Shift + Cuộn chuột)">+</button>
+                                <button onClick={zoomOut} className="px-2.5 py-1 hover:bg-slate-600 font-bold" title="Thu nhỏ (Ctrl / Shift + Cuộn chuột)">-</button>
+                                <button onClick={zoomReset} className="px-2 py-1 hover:bg-slate-600 font-semibold text-[11px] text-yellow-300 min-w-[48px] text-center" title="Đặt lại zoom mặc định">{Math.round(scale * 100)}%</button>
+                                <button onClick={zoomIn} className="px-2.5 py-1 hover:bg-slate-600 font-bold" title="Phóng to (Ctrl / Shift + Cuộn chuột)">+</button>
                             </div>
 
                             <button onClick={() => triggerFileDownload(base64Data, sanitizeFileName(fileName || `${title || 'PhuLuc'}`, 'pdf'))} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 rounded font-bold flex items-center gap-1 shadow">
@@ -993,8 +1083,9 @@
                         </div>
                     </div>
 
+                    {/* THANH TÌM KIẾM TRONG PDF */}
                     {showSearch && (
-                        <div className="bg-slate-750 px-3 py-2 border-t border-slate-700 flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-1">
+                        <div className="bg-slate-750 px-3 py-2 border-t border-slate-700 flex items-center gap-2 text-xs animate-in fade-in slide-in-from-top-1 shrink-0 z-10">
                             <input
                                 type="text"
                                 placeholder="Nhập từ khóa cần tìm trong PDF..."
@@ -1027,12 +1118,13 @@
                         </div>
                     )}
 
+                    {/* VÙNG CUỘN TRANG (HỖ TRỢ CUỘN NGANG VÀ DỌC TỰ DO KHI ZOOM) */}
                     <div 
                         ref={containerRef}
                         onTouchStart={handleTouchStart}
                         onTouchMove={handleTouchMove}
                         onTouchEnd={handleTouchEnd}
-                        className="flex-1 overflow-auto p-4 flex flex-col items-center custom-scrollbar min-h-[450px] touch-pan-x touch-pan-y"
+                        className="flex-1 overflow-auto p-4 custom-scrollbar min-h-[450px] touch-pan-x touch-pan-y"
                     >
                         {loading && <div className="p-12 text-center text-slate-500 font-bold text-xs">⏳ Đang nạp các trang PDF chất lượng cao...</div>}
                         
@@ -1046,14 +1138,15 @@
                         )}
 
                         {!loading && !error && pdfDocRef.current && (
-                            <div className="w-full flex flex-col items-center">
+                            <div className="w-max min-w-full flex flex-col items-center mx-auto">
                                 {Array.from({ length: numPages }, (_, i) => i + 1).map(pNum => (
                                     <PdfPageItem 
                                         key={pNum}
                                         pdfDoc={pdfDocRef.current}
                                         pageNum={pNum}
                                         scale={scale}
-                                        isHighlighted={searchResults.length > 0 && searchResults[currentMatchIdx] === pNum}
+                                        searchQuery={searchQuery}
+                                        isCurrentPageMatch={searchResults.length > 0 && searchResults[currentMatchIdx] === pNum}
                                     />
                                 ))}
                             </div>

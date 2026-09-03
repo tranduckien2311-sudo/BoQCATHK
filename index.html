@@ -98,6 +98,9 @@
             }
         }
 
+        // BỘ NHỚ RAM ĐỆM TOÀN CỤC CHỐNG MẤT DỮ LIỆU KHI CHUYỂN TAB
+        const GLOBAL_DOCS_STORE = {};
+
         const ROMAN_NUMERALS = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX","XXI","XXII","XXIII","XXIV","XXV","XXVI","XXVII","XXVIII","XXIX","XXX","XXXI","XXXII","XXXIII","XXXIV","XXXV","XXXVI","XXXVII","XXXVIII","XXXIX","XL","XLI","XLII","XLIII","XLIV","XLV","XLVI","XLVII","XLVIII","XLIX","L","LI","LII","LIII","LIV","LV","LVI","LVII","LVIII","LIX","LX","LXI","LXII","LXIII"];
         const ROMAN_STRICT_PATTERN = "(?:LX|L|XLIX|XLVIII|XLVII|XLVI|XLV|XLIV|XLIII|XLII|XLI|XL|XXXIX|XXXVIII|XXXVII|XXXVI|XXXV|XXXIV|XXXIII|XXXII|XXXI|XXX|XXIX|XXVIII|XXVII|XXVI|XXV|XXIV|XXIII|XXII|XXI|XX|XIX|XVIII|XVII|XVI|XV|XIV|XIII|XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I|\\d+)";
         const STRICT_CODE_PATTERN = `(?:[0-9]+[a-zA-Z]?(?:\\.[0-9]+)*|LX|L|XLIX|XLVIII|XLVII|XLVI|XLV|XLIV|XLIII|XLII|XLI|XL|XXXIX|XXXVIII|XXXVII|XXXVI|XXXV|XXXIV|XXXIII|XXXII|XXXI|XXX|XXIX|XXVIII|XXVII|XXVI|XXV|XXIV|XXIII|XXII|XXI|XX|XIX|XVIII|XVII|XVI|XV|XIV|XIII|XII|XI|X|IX|VIII|VII|VI|V|IV|III|II|I)`;
@@ -206,7 +209,7 @@
                 }
             }
             return 0;
-        }
+        };
 
         const getAppendixBadgeLabel = (app, isCurrentBoQC, isCurrentND223) => {
             if (!app) return 'Phụ lục';
@@ -223,10 +226,103 @@
             return `Phụ lục ${cleanCode || app.id}`;
         };
 
+        // HÀM LIÊN KẾT TỰ ĐỘNG CHUẨN XÁC 100% VỚI KHO GITHUB MASTER
+        const getAppendixOnlineUrls = (docName, app) => {
+            if (!app) return { pdfUrl: "", pdfName: "", wordUrl: "", wordName: "" };
+            const norm = String(docName || '').toLowerCase();
+            
+            // Manuals CAME, MME, MOE, IOSA, SMM không dùng kho phụ lục NĐ
+            if (/(?:came|moe|mme|manual|smm|om|sop|handbook|iosa|ism)/i.test(norm)) {
+                return { pdfUrl: "", pdfName: "", wordUrl: "", wordName: "" };
+            }
+
+            const rawCode = String(app.code || '').trim();
+            const rawTitle = String(app.title || '').trim();
+
+            let num = null;
+            const codeNumMatch = rawCode.match(/\d+/);
+            const titleNumMatch = rawTitle.match(/(?:mẫu\s*số|mẫu|phụ\s*lục|pl)\s*(\d+)/i) || rawTitle.match(/\d+/);
+            if (codeNumMatch) {
+                num = parseInt(codeNumMatch[0], 10);
+            } else if (titleNumMatch) {
+                num = parseInt(titleNumMatch[1] || titleNumMatch[0], 10);
+            }
+
+            let roman = "";
+            if (rawCode && /^[IVXLCDM]+$/i.test(rawCode)) {
+                roman = rawCode.toUpperCase();
+            } else {
+                const romanMatch = rawTitle.match(/(?:phụ\s*lục|pl|appendix)\s+([IVXLCDM]+)\b/i);
+                if (romanMatch) {
+                    roman = romanMatch[1].toUpperCase();
+                } else if (num && num > 0 && num <= 63) {
+                    roman = decimalToRoman(num);
+                }
+            }
+
+            if (!num && roman) {
+                num = romanToDecimal(roman);
+            }
+
+            const padded = num !== null ? String(num).padStart(2, '0') : '01';
+
+            let pdfUrl = "";
+            let pdfName = "";
+            let wordUrl = "";
+            let wordName = "";
+
+            if (norm.includes('221')) {
+                const isMau = rawTitle.toLowerCase().includes('mẫu') || rawCode.toLowerCase().includes('mẫu');
+                if (isMau && num !== null) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`;
+                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Mau_${padded}.docx`;
+                    wordName = `Mau_${padded}.docx`;
+                } else if (roman) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_${roman}.pdf`;
+                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_${roman}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Phu_luc_${num || 1}.docx`;
+                    wordName = `Phu_luc_${num || 1}.docx`;
+                }
+            } else if (norm.includes('223')) {
+                if (num !== null && num <= 27) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Pdf/ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${padded}.pdf`;
+                    pdfName = `ND_223_2026_NĐ-CP_Phu Luc_Mau ${padded}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Word/Mau_So_${padded}.docx`;
+                    wordName = `Mau_So_${padded}.docx`;
+                }
+            } else {
+                // Mặc định hoặc Bộ Quy Chế (Chính)
+                if (roman) {
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Pdf/BoQCATHK_PHU%20LUC_${roman}.pdf`;
+                    pdfName = `BoQCATHK_PHU LUC_${roman}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Word/BoQCATHK_Phu%20Luc_Phu_luc_${roman}.docx`;
+                    wordName = `BoQCATHK_Phu Luc_Phu_luc_${roman}.docx`;
+                }
+            }
+
+            return { pdfUrl, pdfName, wordUrl, wordName };
+        };
+
+        const ensureAppendixUrls = (targetApp, docName) => {
+            if (!targetApp) return targetApp;
+            if (!targetApp.pdfFileUrl || !targetApp.wordFileUrl) {
+                const urls = getAppendixOnlineUrls(docName, targetApp);
+                if (urls.pdfUrl && !targetApp.pdfFileUrl) {
+                    targetApp.pdfFileUrl = urls.pdfUrl;
+                    targetApp.pdfFileName = targetApp.pdfFileName || urls.pdfName;
+                }
+                if (urls.wordUrl && !targetApp.wordFileUrl) {
+                    targetApp.wordFileUrl = urls.wordUrl;
+                    targetApp.wordFileName = targetApp.wordFileName || urls.wordName;
+                }
+            }
+            return targetApp;
+        };
+
         const renderTextWithHyperlinks = (text, onJump) => {
             if (!text || typeof text !== 'string') return text;
             
-            // Regex nhận diện đa dạng: IOSA (MNT/ORG/FLT/DSP...), Table x.x, Điều VN, Section, và Phụ lục
             const linkRegex = /(?:(?:ORG|FLT|DSP|MNT|CAB|GRH|CGO|SEC|ISM)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:Table|Bảng|TABLE|BẢNG)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:ĐIỀU|Điều|Ðiều|Điều|DIEU|Dieu)\s*[\.\:\-]?\s*(\d+[a-zA-Z]?(?:\.\d+)*))|(?:(?:Mục|Muc|Section|Clause|Item)\s*(\d+\.\d+(?:\.\d+)*))|(?:(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)\s*([0-9A-Za-zIVXLCDM\.\_\-]+))|(\b[1-9]\d*\.\d+(?:\.\d+)+\b)/gi;
             
             const elements = [];
@@ -328,7 +424,6 @@
                 const fullKey = fullMatch.toLowerCase();
                 if (!rawCode || seen.has(uniqueKey) || seen.has(fullKey)) continue;
 
-                // Khớp chính xác mã mục (MNT 1.9.1, Table 1.1, Điều 5...)
                 const matchedArt = allArts.find(a => 
                     String(a.id).trim().toLowerCase() === fullKey ||
                     String(a.id).trim().toLowerCase() === uniqueKey ||
@@ -606,7 +701,7 @@
         };
 
         // =========================================================================
-        // 🚀 UNIVERSAL PDF VIEWER CHẤT LƯỢNG CAO (FULL ZOOM, SEARCH, PINCH)
+        // UNIVERSAL PDF VIEWER (XỬ LÝ AN TOÀN URL GITHUB & BASE64)
         // =========================================================================
         function PdfPageItem({ pdfDoc, pageNum, scale, isHighlighted }) {
             const canvasRef = React.useRef(null);
@@ -685,38 +780,57 @@
                 }
                 setLoading(true);
                 setError(null);
-                try {
-                    let docSource = base64Data;
-                    if (typeof base64Data === 'string' && (base64Data.startsWith('data:') || /^[A-Za-z0-9+/=\s\r\n]+$/.test(base64Data.substring(0, 100)))) {
-                        const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1].replace(/[\s\r\n]/g, '') : base64Data.replace(/[\s\r\n]/g, '');
-                        const binaryStr = atob(rawBase64);
-                        const bytes = new Uint8Array(binaryStr.length);
-                        for (let i = 0; i < binaryStr.length; i++) {
-                            bytes[i] = binaryStr.charCodeAt(i);
-                        }
-                        docSource = { data: bytes };
-                    }
+                let isCancelled = false;
 
-                    if (window.pdfjsLib) {
-                        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                        const loadingTask = window.pdfjsLib.getDocument(docSource);
-                        loadingTask.promise.then((pdf) => {
-                            pdfDocRef.current = pdf;
-                            setNumPages(pdf.numPages);
-                            setCurrentVisiblePage(1);
-                            setLoading(false);
-                        }).catch(err => {
-                            console.error("Lỗi nạp PDF:", err);
+                const loadPdfSource = async () => {
+                    try {
+                        let docSource = base64Data;
+                        
+                        // Nếu là URL online (GitHub Raw), tải ArrayBuffer để tránh chặn CORS PDF.js
+                        if (typeof base64Data === 'string' && (base64Data.startsWith('http://') || base64Data.startsWith('https://'))) {
+                            try {
+                                const res = await fetch(base64Data);
+                                if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+                                const arrayBuf = await res.arrayBuffer();
+                                docSource = { data: new Uint8Array(arrayBuf) };
+                            } catch (e) {
+                                console.warn("Fetch trực tiếp không thành công, thử nạp trực tiếp link:", e);
+                                docSource = base64Data;
+                            }
+                        } else if (typeof base64Data === 'string' && (base64Data.startsWith('data:') || /^[A-Za-z0-9+/=\s\r\n]+$/.test(base64Data.substring(0, 100)))) {
+                            const rawBase64 = base64Data.includes(',') ? base64Data.split(',')[1].replace(/[\s\r\n]/g, '') : base64Data.replace(/[\s\r\n]/g, '');
+                            const binaryStr = atob(rawBase64);
+                            const bytes = new Uint8Array(binaryStr.length);
+                            for (let i = 0; i < binaryStr.length; i++) {
+                                bytes[i] = binaryStr.charCodeAt(i);
+                            }
+                            docSource = { data: bytes };
+                        }
+
+                        if (window.pdfjsLib) {
+                            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                            const loadingTask = window.pdfjsLib.getDocument(docSource);
+                            const pdf = await loadingTask.promise;
+                            if (!isCancelled) {
+                                pdfDocRef.current = pdf;
+                                setNumPages(pdf.numPages);
+                                setCurrentVisiblePage(1);
+                                setLoading(false);
+                            }
+                        } else {
+                            if (!isCancelled) setLoading(false);
+                        }
+                    } catch (e) {
+                        if (!isCancelled) {
+                            console.error("Lỗi nạp PDF:", e);
                             setLoading(false);
                             setError("Không thể nạp trực tiếp file PDF này.");
-                        });
-                    } else {
-                        setLoading(false);
+                        }
                     }
-                } catch (e) {
-                    setLoading(false);
-                    setError("Lỗi giải mã file PDF");
-                }
+                };
+
+                loadPdfSource();
+                return () => { isCancelled = true; };
             }, [base64Data]);
 
             React.useEffect(() => {
@@ -963,8 +1077,13 @@
         };
 
         const EMBEDDED_WORKSPACE = getEmbeddedWorkspace();
-        const IDB_NAME = 'AviationSafety_MultiDocWorkspace_V4';
+        if (EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.data) {
+            Object.keys(EMBEDDED_WORKSPACE.data).forEach(k => {
+                GLOBAL_DOCS_STORE[k] = EMBEDDED_WORKSPACE.data[k];
+            });
+        }
 
+        const IDB_NAME = 'AviationSafety_MultiDocWorkspace_V4';
         let dbInstance = null;
         const WorkspaceDB = {
             open: function() {
@@ -994,6 +1113,9 @@
                 });
             },
             put: async function(key, data) {
+                if (data && key !== 'docs_meta') {
+                    GLOBAL_DOCS_STORE[key] = data;
+                }
                 const db = await this.open();
                 if (!db) return true;
                 return new Promise((resolve) => {
@@ -1006,30 +1128,46 @@
                 });
             },
             get: async function(key) {
+                if (GLOBAL_DOCS_STORE[key]) {
+                    return GLOBAL_DOCS_STORE[key];
+                }
                 const db = await this.open();
                 if (!db) return null;
                 return new Promise((resolve) => {
                     try {
                         const tx = db.transaction('workspace', 'readonly');
                         const req = tx.objectStore('workspace').get(key);
-                        req.onsuccess = () => resolve(req.result ? req.result.data : null);
+                        req.onsuccess = () => {
+                            const res = req.result ? req.result.data : null;
+                            if (res && key !== 'docs_meta') GLOBAL_DOCS_STORE[key] = res;
+                            resolve(res);
+                        };
                         req.onerror = () => resolve(null);
                     } catch (e) { resolve(null); }
                 });
             },
             getAllEntries: async function() {
                 const db = await this.open();
-                if (!db) return [];
+                if (!db) {
+                    return Object.keys(GLOBAL_DOCS_STORE).map(k => ({ key: k, data: GLOBAL_DOCS_STORE[k] }));
+                }
                 return new Promise((resolve) => {
                     try {
                         const tx = db.transaction('workspace', 'readonly');
                         const req = tx.objectStore('workspace').getAll();
-                        req.onsuccess = () => resolve(req.result || []);
+                        req.onsuccess = () => {
+                            const entries = req.result || [];
+                            entries.forEach(e => {
+                                if (e.key !== 'docs_meta') GLOBAL_DOCS_STORE[e.key] = e.data;
+                            });
+                            resolve(entries);
+                        };
                         req.onerror = () => resolve([]);
                     } catch (e) { resolve([]); }
                 });
             },
             remove: async function(key) {
+                delete GLOBAL_DOCS_STORE[key];
                 const db = await this.open();
                 if (!db) return true;
                 return new Promise((resolve) => {
@@ -1042,6 +1180,7 @@
                 });
             },
             clearAll: async function() {
+                Object.keys(GLOBAL_DOCS_STORE).forEach(k => delete GLOBAL_DOCS_STORE[k]);
                 const db = await this.open();
                 if (!db) return true;
                 return new Promise((resolve) => {
@@ -1161,12 +1300,13 @@
         function App() {
             const isStandaloneMode = Boolean(EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.meta && EMBEDDED_WORKSPACE.meta.length > 0);
             const isReaderClientMode = Boolean(window.IS_ONLINE_CLIENT_MODE || isStandaloneMode);
-			const [importMode, setImportMode] = useState('came'); // 'law' | 'came' | 'iosa'
+            const [importMode, setImportMode] = useState('came'); // 'law' | 'came' | 'iosa'
             const [docs, setDocs] = useState(initialDocsMeta);
             const [savedRegistry, setSavedRegistry] = useState([]);
             const [activeDocId, setActiveDocId] = useState(initialActiveId);
             const [docData, setDocData] = useState(initialDocPackage); 
             const [reloadTabModal, setReloadTabModal] = useState({ isOpen: false, doc: null });
+            
             const activeDocName = (docData && docData.name) || (docs && docs.find(d => d.id === activeDocId)?.name) || 'Bộ Quy Chế (Chính)';
             const activeDocType = (docs && docs.find(d => d.id === activeDocId)?.type) || (docData?.pdfUrl ? 'pdf' : 'docx');
 
@@ -1352,10 +1492,17 @@
                             setOnlineWorkspaceData(fullOnlineBundle);
                             setDocs(manifest.meta);
 
-                            // LƯU TOÀN BỘ TÀI LIỆU VÀO CSDL ĐỂ CHUYỂN TAB KHÔNG BỊ MẤT NỘI DUNG
                             await WorkspaceDB.put('docs_meta', manifest.meta);
                             for (const docKey of Object.keys(combinedData)) {
-                                await WorkspaceDB.put(docKey, combinedData[docKey]);
+                                const dPkg = combinedData[docKey];
+                                if (dPkg && dPkg.appendices) {
+                                    const dName = dPkg.name || manifest.meta.find(m => m.id === docKey)?.name || docKey;
+                                    Object.values(dPkg.appendices).forEach(app => {
+                                        ensureAppendixUrls(app, dName);
+                                    });
+                                }
+                                GLOBAL_DOCS_STORE[docKey] = dPkg;
+                                await WorkspaceDB.put(docKey, dPkg);
                             }
 
                             const firstId = manifest.meta[0]?.id || 'main';
@@ -1399,25 +1546,39 @@
                 initLoad();
             }, []);
 
+            // HÀM NẠP TÀI LIỆU AN TOÀN TUYỆT ĐỐI KHÔNG BAO GIỜ MẤT DỮ LIỆU
             const loadDocData = async (docId, overrideSource = null) => {
                 setActiveDocId(docId);
                 let pkg = null;
 
-                if (overrideSource && overrideSource.data) {
+                if (overrideSource && overrideSource.data && overrideSource.data[docId]) {
                     pkg = overrideSource.data[docId];
+                }
+                if (!pkg && GLOBAL_DOCS_STORE[docId]) {
+                    pkg = GLOBAL_DOCS_STORE[docId];
                 }
                 if (!pkg) {
                     pkg = await WorkspaceDB.get(docId);
                 }
-                if (!pkg && onlineWorkspaceData && onlineWorkspaceData.data) {
+                if (!pkg && onlineWorkspaceData && onlineWorkspaceData.data && onlineWorkspaceData.data[docId]) {
                     pkg = onlineWorkspaceData.data[docId];
                 }
-                if (!pkg && isStandaloneMode && EMBEDDED_WORKSPACE?.data) {
+                if (!pkg && isStandaloneMode && EMBEDDED_WORKSPACE?.data && EMBEDDED_WORKSPACE.data[docId]) {
                     pkg = EMBEDDED_WORKSPACE.data[docId];
                 }
 
                 if (pkg && (pkg.articles || pkg.pdfUrl)) {
+                    GLOBAL_DOCS_STORE[docId] = pkg;
+
                     if (pkg.articles) {
+                        // Đảm bảo toàn bộ link phụ lục được kết nối chuẩn
+                        const dName = pkg.name || docs.find(d => d.id === docId)?.name || docId;
+                        if (pkg.appendices) {
+                            Object.values(pkg.appendices).forEach(app => {
+                                ensureAppendixUrls(app, dName);
+                            });
+                        }
+
                         AviationDB.setLoadedPackage(pkg);
                         setDocData(pkg);
                         const count = Object.keys(pkg.articles || {}).length;
@@ -1454,9 +1615,11 @@
                 }
             };
 
+            // HÀM CHUYỂN TAB AN TOÀN - ĐỒNG BỘ DỮ LIỆU & BẢO TOÀN TRẠNG THÁI
             const switchDoc = async (nextDocId) => {
                 if (nextDocId === activeDocId) return;
 
+                // Lưu trạng thái của tài liệu hiện tại
                 const currentNavSnapshot = {
                     tab,
                     singleId,
@@ -1475,18 +1638,37 @@
                 };
                 setDocNavStates(updatedNavStates);
 
+                // Nạp dữ liệu tài liệu đích
                 await loadDocData(nextDocId);
 
+                // Khôi phục trạng thái an toàn, tránh filter cũ làm trống danh sách
                 const savedState = updatedNavStates[nextDocId];
+                const targetPkg = GLOBAL_DOCS_STORE[nextDocId];
+                const validParts = (targetPkg?.parts || []).map(p => String(p.id));
+
                 if (savedState) {
                     setTab(savedState.tab || 'all');
-                    if (savedState.singleId) setSingleId(savedState.singleId);
+                    
+                    if (savedState.singleId && targetPkg?.articles && targetPkg.articles[savedState.singleId]) {
+                        setSingleId(savedState.singleId);
+                    } else {
+                        const allIds = targetPkg?.articles ? Object.keys(targetPkg.articles).sort(naturalCompareSectionCodes) : [];
+                        if (allIds.length > 0) setSingleId(allIds[0]);
+                    }
+
                     if (savedState.singleAppendixKey) setSingleAppendixKey(savedState.singleAppendixKey);
                     if (savedState.page) setPage(savedState.page);
                     setSearch(savedState.search || '');
                     setAppendixSearch(savedState.appendixSearch || '');
-                    setPartFilter(savedState.partFilter || 'all');
-                    setChapterFilter(savedState.chapterFilter || 'all');
+
+                    // Chỉ phục hồi partFilter nếu thuộc tài liệu này
+                    if (savedState.partFilter && validParts.includes(String(savedState.partFilter))) {
+                        setPartFilter(savedState.partFilter);
+                    } else {
+                        setPartFilter('all');
+                    }
+                    
+                    setChapterFilter('all'); // Luôn reset chapter filter khi chuyển tab để tránh lệch
                     setJumpHistory(savedState.jumpHistory || null);
                 } else {
                     setTab('all');
@@ -1524,13 +1706,14 @@
                 setResetModal(true);
             };
 
-			 const deleteSpecificDoc = async (docId, docName) => {
+            const deleteSpecificDoc = async (docId, docName) => {
                 if (docId === 'main') {
                     alert("Không thể xóa tài liệu chính!");
                     return;
                 }
                 if (!confirm(`Bạn có chắc chắn muốn XÓA VĨNH VIỄN tài liệu "${docName}" khỏi CSDL?`)) return;
 
+                delete GLOBAL_DOCS_STORE[docId];
                 await WorkspaceDB.remove(docId);
                 const updatedDocs = docs.filter(d => d.id !== docId);
                 setDocs(updatedDocs);
@@ -1546,7 +1729,6 @@
                 await refreshStoredRegistry();
                 notify(`✅ Đã xóa "${docName}"! Bạn có thể nạp lại file ngay.`);
             };
-
 
             const clearAllDatabase = async () => {
                 if (!confirm("⚠️ CẢNH BÁO: XÓA SẠCH toàn bộ CSDL IndexedDB trên máy của bạn?")) return;
@@ -1574,9 +1756,10 @@
                 setDocs(updatedDocs);
                 await WorkspaceDB.put('docs_meta', updatedDocs);
 
-                let pkg = await WorkspaceDB.get(docId);
+                let pkg = GLOBAL_DOCS_STORE[docId] || await WorkspaceDB.get(docId);
                 if (pkg) {
                     pkg.name = cleanNewName;
+                    GLOBAL_DOCS_STORE[docId] = pkg;
                     await WorkspaceDB.put(docId, pkg);
                     if (activeDocId === docId) {
                         setDocData({ ...pkg });
@@ -1597,33 +1780,15 @@
                 try {
                     notify("⏳ Đang lưu dữ liệu vào bộ nhớ trình duyệt để chạy Offline...");
 
-                    let packageMeta = null;
+                    let packageMeta = docs;
                     let packageData = {};
 
-                    if (onlineWorkspaceData && onlineWorkspaceData.meta) {
-                        packageMeta = onlineWorkspaceData.meta;
-                        packageData = onlineWorkspaceData.data || {};
-                    } else if (isStandaloneMode && EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.meta) {
-                        packageMeta = EMBEDDED_WORKSPACE.meta;
-                        packageData = EMBEDDED_WORKSPACE.data || {};
+                    for (const d of docs) {
+                        let pkg = GLOBAL_DOCS_STORE[d.id] || (d.id === activeDocId ? docData : await WorkspaceDB.get(d.id));
+                        if (pkg) packageData[d.id] = pkg;
                     }
 
-                    if (!packageMeta || Object.keys(packageData).length === 0) {
-                        const allEntries = await WorkspaceDB.getAllEntries();
-                        if (allEntries && allEntries.length > 0) {
-                            packageMeta = docs;
-                            allEntries.forEach(entry => {
-                                if (entry.key !== 'docs_meta') {
-                                    packageData[entry.key] = entry.data;
-                                }
-                            });
-                        } else if (docData) {
-                            packageMeta = docs;
-                            packageData[activeDocId] = docData;
-                        }
-                    }
-
-                    if (!packageMeta || Object.keys(packageData).length === 0) {
+                    if (Object.keys(packageData).length === 0) {
                         alert("⚠️ Không tìm thấy nguồn dữ liệu để lưu offline!");
                         return;
                     }
@@ -1644,10 +1809,11 @@
             };
 
             const handleSaveAppendixAiDataModal = async () => {
-                let pkg = await WorkspaceDB.get(activeDocId) || AviationDB.getRawPackage();
+                let pkg = GLOBAL_DOCS_STORE[activeDocId] || await WorkspaceDB.get(activeDocId) || AviationDB.getRawPackage();
                 pkg.appendixAiData = (appendixAiModal.editContent || '').trim();
                 pkg.name = activeDocName;
 
+                GLOBAL_DOCS_STORE[activeDocId] = pkg;
                 await WorkspaceDB.put(activeDocId, pkg);
                 setDocData({ ...pkg });
                 setAppendixAiModal(prev => ({ ...prev, isEditing: false }));
@@ -1657,7 +1823,7 @@
             const executeFastTranslation = async (targetLangCode, targetLangName, targetArticle = null) => {
                 setLangSelectModal({ isOpen: false, mode: 'all', article: null });
 
-                let pkg = (activeDocId && docData) ? docData : await WorkspaceDB.get(activeDocId);
+                let pkg = GLOBAL_DOCS_STORE[activeDocId] || (activeDocId && docData) ? docData : await WorkspaceDB.get(activeDocId);
                 if (!pkg || !pkg.articles || Object.keys(pkg.articles).length === 0) {
                     notify("⚠️ Tài liệu không có nội dung điều khoản để dịch!");
                     return;
@@ -1779,10 +1945,12 @@
                     }
 
                     if (completed % 5 === 0 || completed === pendingArticles.length) {
+                        GLOBAL_DOCS_STORE[activeDocId] = pkg;
                         await WorkspaceDB.put(activeDocId, pkg);
                     }
                 }
 
+                GLOBAL_DOCS_STORE[activeDocId] = pkg;
                 await WorkspaceDB.put(activeDocId, pkg);
                 AviationDB.setLoadedPackage(pkg);
                 setDocData({ ...pkg });
@@ -1848,14 +2016,7 @@
 
                 const summaries = [];
                 for (const d of docs) {
-                    let p = null;
-                    if (d.id === activeDocId && docData) {
-                        p = docData;
-                    } else if (isStandaloneMode && EMBEDDED_WORKSPACE?.data?.[d.id]) {
-                        p = EMBEDDED_WORKSPACE.data[d.id];
-                    } else {
-                        p = await WorkspaceDB.get(d.id);
-                    }
+                    let p = GLOBAL_DOCS_STORE[d.id] || ((d.id === activeDocId && docData) ? docData : await WorkspaceDB.get(d.id));
 
                     let matchFound = null;
                     let matchType = '';
@@ -1914,7 +2075,7 @@
                 setSelectorModal(prev => ({ ...prev, isOpen: false }));
 
                 if (targetDocId !== activeDocId) {
-                    await loadDocData(targetDocId);
+                    await switchDoc(targetDocId);
                 }
 
                 if (summaryItem.hasMatch && summaryItem.matchItem) {
@@ -1963,7 +2124,7 @@
                     const targetDocName = ref.docName || activeDocName;
 
                     if (targetDocId !== activeDocId) {
-                        await loadDocData(targetDocId);
+                        await switchDoc(targetDocId);
                     }
 
                     setJumpHistory({
@@ -1998,7 +2159,7 @@
                 setJumpHistory(null);
 
                 if (prev.fromDocId && prev.fromDocId !== activeDocId) {
-                    await loadDocData(prev.fromDocId);
+                    await switchDoc(prev.fromDocId);
                 }
 
                 if (prev.fromTab === 'appendices') {
@@ -2222,39 +2383,24 @@ ${contextAppendices}`;
             const exportStandaloneWorkspace = async (stripAttachments = false) => {
                 try {
                     notify(stripAttachments ? "⚡ Đang tạo gói Siêu Nhẹ..." : "📦 Đang tạo gói Đầy Đủ...");
-                    const allEntries = await WorkspaceDB.getAllEntries();
                     const packageData = {};
                     const packageMeta = docs.map(d => ({ ...d }));
 
-                    if (allEntries && allEntries.length > 0) {
-                        for (const entry of allEntries) {
-                            if (entry.key !== 'docs_meta') {
-                                if (stripAttachments) {
-                                    const cleanedPkg = JSON.parse(JSON.stringify(entry.data));
-                                    if (cleanedPkg.appendices) {
-                                        Object.keys(cleanedPkg.appendices).forEach(k => {
-                                            cleanedPkg.appendices[k].pdfFileUrl = "";
-                                            cleanedPkg.appendices[k].wordFileUrl = "";
-                                        });
-                                    }
-                                    packageData[entry.key] = cleanedPkg;
-                                } else {
-                                    packageData[entry.key] = entry.data;
+                    for (const d of docs) {
+                        let pkg = GLOBAL_DOCS_STORE[d.id] || (d.id === activeDocId ? docData : await WorkspaceDB.get(d.id));
+                        if (pkg) {
+                            if (stripAttachments) {
+                                const cleanedPkg = JSON.parse(JSON.stringify(pkg));
+                                if (cleanedPkg.appendices) {
+                                    Object.keys(cleanedPkg.appendices).forEach(k => {
+                                        cleanedPkg.appendices[k].pdfFileUrl = "";
+                                        cleanedPkg.appendices[k].wordFileUrl = "";
+                                    });
                                 }
+                                packageData[d.id] = cleanedPkg;
+                            } else {
+                                packageData[d.id] = pkg;
                             }
-                        }
-                    } else if (docData) {
-                        if (stripAttachments) {
-                            const cleanedPkg = JSON.parse(JSON.stringify(docData));
-                            if (cleanedPkg.appendices) {
-                                Object.keys(cleanedPkg.appendices).forEach(k => {
-                                    cleanedPkg.appendices[k].pdfFileUrl = "";
-                                    cleanedPkg.appendices[k].wordFileUrl = "";
-                                });
-                            }
-                            packageData[activeDocId] = cleanedPkg;
-                        } else {
-                            packageData[activeDocId] = docData;
                         }
                     }
 
@@ -2365,83 +2511,9 @@ ${scriptCode}
                     canvas.toBlob(blob => resolve(blob), 'image/png');
                 });
             };
-		const getAppendixOnlineUrls = (docName, app) => {
-            if (!app) return { pdfUrl: "", pdfName: "", wordUrl: "", wordName: "" };
-            const norm = String(docName || '').toLowerCase();
-            
-            // Nếu là Manuals CAME, MME, MOE, IOSA, SMM -> Không phải BoQC/ND
-            if (/(?:came|moe|mme|manual|smm|om|sop|handbook|iosa|ism)/i.test(norm)) {
-                return { pdfUrl: "", pdfName: "", wordUrl: "", wordName: "" };
-            }
 
-            const rawCode = String(app.code || '').trim();
-            const rawTitle = String(app.title || '').trim();
-
-            let num = null;
-            const codeNumMatch = rawCode.match(/\d+/);
-            const titleNumMatch = rawTitle.match(/(?:mẫu\s*số|mẫu|phụ\s*lục|pl)\s*(\d+)/i) || rawTitle.match(/\d+/);
-            if (codeNumMatch) {
-                num = parseInt(codeNumMatch[0], 10);
-            } else if (titleNumMatch) {
-                num = parseInt(titleNumMatch[1] || titleNumMatch[0], 10);
-            }
-
-            let roman = "";
-            if (rawCode && /^[IVXLCDM]+$/i.test(rawCode)) {
-                roman = rawCode.toUpperCase();
-            } else {
-                const romanMatch = rawTitle.match(/(?:phụ\s*lục|pl|appendix)\s+([IVXLCDM]+)\b/i);
-                if (romanMatch) {
-                    roman = romanMatch[1].toUpperCase();
-                } else if (num && num > 0 && num <= 63) {
-                    roman = decimalToRoman(num);
-                }
-            }
-
-            if (!num && roman) {
-                num = romanToDecimal(roman);
-            }
-
-            const padded = num !== null ? String(num).padStart(2, '0') : '01';
-
-            let pdfUrl = "";
-            let pdfName = "";
-            let wordUrl = "";
-            let wordName = "";
-
-            if (norm.includes('221')) {
-                const isMau = rawTitle.toLowerCase().includes('mẫu') || rawCode.toLowerCase().includes('mẫu');
-                if (isMau && num !== null) {
-                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`;
-                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf`;
-                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Mau_${padded}.docx`;
-                    wordName = `Mau_${padded}.docx`;
-                } else if (roman) {
-                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_${roman}.pdf`;
-                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_${roman}.pdf`;
-                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Phu_luc_${num || 1}.docx`;
-                    wordName = `Phu_luc_${num || 1}.docx`;
-                }
-            } else if (norm.includes('223')) {
-                if (num !== null && num <= 27) {
-                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Pdf/ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${padded}.pdf`;
-                    pdfName = `ND_223_2026_NĐ-CP_Phu Luc_Mau ${padded}.pdf`;
-                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Word/Mau_So_${padded}.docx`;
-                    wordName = `Mau_So_${padded}.docx`;
-                }
-            } else if (norm.includes('boqc') || norm.includes('quy chế') || norm.includes('chính') || norm.includes('banhanh') || norm === 'main') {
-                if (roman) {
-                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Pdf/BoQCATHK_PHU%20LUC_${roman}.pdf`;
-                    pdfName = `BoQCATHK_PHU LUC_${roman}.pdf`;
-                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Word/BoQCATHK_Phu%20Luc_Phu_luc_${roman}.docx`;
-                    wordName = `BoQCATHK_Phu Luc_Phu_luc_${roman}.docx`;
-                }
-            }
-
-            return { pdfUrl, pdfName, wordUrl, wordName };
-        };
-            
-			const exportOnlineGithubWorkspace = async () => {
+            // HÀM ĐÓNG GÓI ONLINE GITHUB CHUẨN XÁC, BẢO TOÀN LINK PHỤ LỤC & DATA
+            const exportOnlineGithubWorkspace = async () => {
                 try {
                     notify("🌐 Đang liên kết URL GitHub & tối ưu dữ liệu Online...");
 
@@ -2449,7 +2521,10 @@ ${scriptCode}
                     const packageData = {};
 
                     for (const d of docs) {
-                        let pkg = (d.id === activeDocId && docData) ? docData : await WorkspaceDB.get(d.id);
+                        let pkg = GLOBAL_DOCS_STORE[d.id] || (d.id === activeDocId ? docData : await WorkspaceDB.get(d.id));
+                        if (!pkg && onlineWorkspaceData?.data?.[d.id]) {
+                            pkg = onlineWorkspaceData.data[d.id];
+                        }
                         if (!pkg && isStandaloneMode && EMBEDDED_WORKSPACE?.data?.[d.id]) {
                             pkg = EMBEDDED_WORKSPACE.data[d.id];
                         }
@@ -2463,21 +2538,21 @@ ${scriptCode}
                         return;
                     }
 
-                    // TỰ ĐỘNG GẮN LINK ONLINE GITHUB CHO CÁC PHỤ LỤC & XÓA BASE64 NẶNG
+                    // TỰ ĐỘNG GẮN LINK ONLINE GITHUB CHO CÁC PHỤ LỤC & BẢO TOÀN URL
                     const optimizedData = JSON.parse(JSON.stringify(packageData));
                     Object.keys(optimizedData).forEach(docKey => {
                         const pkg = optimizedData[docKey];
+                        const docDisplayName = pkg.name || docs.find(d => d.id === docKey)?.name || docKey;
                         if (pkg && pkg.appendices) {
                             Object.keys(pkg.appendices).forEach(appKey => {
                                 const app = pkg.appendices[appKey];
-                                const online = getAppendixOnlineUrls(pkg.name, app);
+                                const online = getAppendixOnlineUrls(docDisplayName, app);
 
-                                // Gán đường link Online trực tiếp từ GitHub
                                 if (online.pdfUrl) {
                                     app.pdfFileUrl = online.pdfUrl;
                                     app.pdfFileName = online.pdfName;
                                 } else if (app.pdfFileUrl && app.pdfFileUrl.startsWith('data:')) {
-                                    app.pdfFileUrl = "";
+                                    app.pdfFileUrl = ""; // Xóa base64 nặng để giảm dung lượng
                                 }
 
                                 if (online.wordUrl) {
@@ -2584,7 +2659,7 @@ self.addEventListener('fetch', (e) => {
                     const manifestBlob = new Blob([JSON.stringify(manifestContent, null, 2)], { type: 'application/json;charset=utf-8' });
                     setTimeout(() => triggerFileDownload(manifestBlob, 'data_manifest.json'), 800);
 
-                    // 5. Xuất data_part_1.json
+                    // 5. Xuất data_part_1.json ...
                     chunks.forEach((chunkStr, idx) => {
                         setTimeout(() => {
                             const chunkPayload = JSON.stringify({ index: idx, chunk: chunkStr });
@@ -2748,6 +2823,7 @@ ${scriptCode}
                     alert("Không tìm thấy dữ liệu phụ lục!");
                     return;
                 }
+                ensureAppendixUrls(app, activeDocName);
                 setDownloadChoiceModal({ isOpen: true, app });
             };
 
@@ -2756,10 +2832,7 @@ ${scriptCode}
                 setCompareSelectModal(false);
                 notify(`⏳ Đang nạp danh mục đối chiếu với "${targetDocItem.name}"...`);
 
-                let targetPkg = (targetDocItem.id === activeDocId && docData) ? docData : await WorkspaceDB.get(targetDocItem.id);
-                if (!targetPkg && EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.data) {
-                    targetPkg = EMBEDDED_WORKSPACE.data[targetDocItem.id];
-                }
+                let targetPkg = GLOBAL_DOCS_STORE[targetDocItem.id] || (targetDocItem.id === activeDocId ? docData : await WorkspaceDB.get(targetDocItem.id));
 
                 if (!targetPkg || !targetPkg.articles) {
                     alert("Tài liệu đối chiếu không có nội dung điều khoản!");
@@ -2983,10 +3056,11 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                 const app = AviationDB.getAppendicesMap()?.[appKey];
                 if (!confirm(`Bạn có chắc muốn xóa "${app ? app.title : 'Phụ lục này'}"?`)) return;
                 
-                let pkg = await WorkspaceDB.get(activeDocId) || AviationDB.getRawPackage();
+                let pkg = GLOBAL_DOCS_STORE[activeDocId] || await WorkspaceDB.get(activeDocId) || AviationDB.getRawPackage();
                 if (pkg.appendices && pkg.appendices[appKey]) {
                     delete pkg.appendices[appKey];
                     pkg.name = activeDocName;
+                    GLOBAL_DOCS_STORE[activeDocId] = pkg;
                     await WorkspaceDB.put(activeDocId, pkg);
                     AviationDB.setLoadedPackage(pkg);
                     setDocData({ ...pkg });
@@ -3049,101 +3123,88 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                 for (let key of appKeys) {
                     const app = extractedAppendices[key];
-                    
-                    let appNumber = null;
-                    const numMatch = (app.code + ' ' + app.title).match(/\d+/);
-                    if (numMatch) {
-                        appNumber = parseInt(numMatch[0], 10);
-                    } else {
-                        const rMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
-                        if (rMatch) {
-                            appNumber = romanToDecimal(rMatch[1]);
-                        }
-                    }
+                    ensureAppendixUrls(app, docName);
 
-                    const romanMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
-                    const appRoman = romanMatch ? romanMatch[1].toUpperCase() : (appNumber ? decimalToRoman(appNumber) : '');
-                    const padded = appNumber !== null ? String(appNumber).padStart(2, '0') : '01';
-
-                    const candidatePdfUrls = [];
-                    const candidateWordUrls = [];
-
-                    if (docCategory === 'boqc') {
-                        const basePdf = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Pdf/';
-                        const baseWord = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Word/';
-                        
-                        if (appRoman) {
-                            candidatePdfUrls.push({ url: `${basePdf}BoQCATHK_PHU%20LUC_${appRoman}.pdf`, name: `BoQCATHK_PHU LUC_${appRoman}.pdf` });
-                            candidatePdfUrls.push({ url: `${basePdf}BoQCATHK_PHU_LUC_${appRoman}.pdf`, name: `BoQCATHK_PHU_LUC_${appRoman}.pdf` });
-                            candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu%20Luc_Phu_luc_${appRoman}.docx`, name: `BoQCATHK_Phu Luc_Phu_luc_${appRoman}.docx` });
-                            candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu_Luc_Phu_luc_${appRoman}.docx`, name: `BoQCATHK_Phu_Luc_Phu_luc_${appRoman}.docx` });
-                        }
-                        if (appNumber !== null) {
-                            candidatePdfUrls.push({ url: `${basePdf}BoQCATHK_PHU%20LUC_${appNumber}.pdf`, name: `BoQCATHK_PHU LUC_${appNumber}.pdf` });
-                            candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu%20Luc_Phu_luc_${appNumber}.docx`, name: `BoQCATHK_Phu Luc_Phu_luc_${appNumber}.docx` });
-                            candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu_Luc_Phu_luc_${appNumber}.docx`, name: `BoQCATHK_Phu_Luc_Phu_luc_${appNumber}.docx` });
-                        }
-                    } else if (docCategory === 'nd221') {
-                        const basePdf = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/';
-                        const baseWord = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/';
-
-                        const isMau = app.title.toLowerCase().includes('mẫu') || String(app.code).toLowerCase().includes('mẫu');
-                        if (isMau && appNumber !== null) {
-                            candidatePdfUrls.push({ url: `${basePdf}ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`, name: `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf` });
-                            candidatePdfUrls.push({ url: `${basePdf}ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${appNumber}.pdf`, name: `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${appNumber}.pdf` });
-                            candidateWordUrls.push({ url: `${baseWord}Mau_${appNumber}.docx`, name: `Mau_${appNumber}.docx` });
-                            candidateWordUrls.push({ url: `${baseWord}Mau_${padded}.docx`, name: `Mau_${padded}.docx` });
+                    if (!app.pdfFileUrl || !app.wordFileUrl) {
+                        let appNumber = null;
+                        const numMatch = (app.code + ' ' + app.title).match(/\d+/);
+                        if (numMatch) {
+                            appNumber = parseInt(numMatch[0], 10);
                         } else {
-                            if (appRoman) candidatePdfUrls.push({ url: `${basePdf}ND_221_2026_N%C4%90-CP-Phu%20Luc_${appRoman}.pdf`, name: `ND_221_2026_NĐ-CP-Phu Luc_${appRoman}.pdf` });
-                            if (appNumber !== null) candidateWordUrls.push({ url: `${baseWord}Phu_luc_${appNumber}.docx`, name: `Phu_luc_${appNumber}.docx` });
-                        }
-                    } else if (docCategory === 'nd223') {
-                        const basePdf = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Pdf/';
-                        const baseWord = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Word/';
-
-                        if (appNumber !== null && appNumber <= 27) {
-                            candidatePdfUrls.push({ url: `${basePdf}ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${padded}.pdf`, name: `ND_223_2026_NĐ-CP_Phu Luc_Mau ${padded}.pdf` });
-                            candidatePdfUrls.push({ url: `${basePdf}ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${appNumber}.pdf`, name: `ND_223_2026_NĐ-CP_Phu Luc_Mau ${appNumber}.pdf` });
-                            candidateWordUrls.push({ url: `${baseWord}Mau_So_${padded}.docx`, name: `Mau_So_${padded}.docx` });
-                            candidateWordUrls.push({ url: `${baseWord}Mau_So_${appNumber}.docx`, name: `Mau_So_${appNumber}.docx` });
-                        }
-                    }
-
-                    for (let item of candidatePdfUrls) {
-                        try {
-                            const testRes = await fetch(item.url);
-                            if (testRes.ok) {
-                                const b64 = await fetchFileAsBase64(item.url);
-                                app.pdfFileName = item.name;
-                                app.pdfFileUrl = b64 || item.url;
-                                break;
+                            const rMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
+                            if (rMatch) {
+                                appNumber = romanToDecimal(rMatch[1]);
                             }
-                        } catch (e) {}
-                    }
+                        }
 
-                    for (let item of candidateWordUrls) {
-                        try {
-                            const wordRes = await fetch(item.url);
-                            if (wordRes.ok) {
-                                const ab = await wordRes.arrayBuffer();
-                                const b64 = 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,' + btoa(
-                                    new Uint8Array(ab).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                                );
-                                app.wordFileName = item.name;
-                                app.wordFileUrl = b64;
+                        const romanMatch = (app.code + ' ' + app.title).match(/\b([IVXLCDM]+)\b/i);
+                        const appRoman = romanMatch ? romanMatch[1].toUpperCase() : (appNumber ? decimalToRoman(appNumber) : '');
+                        const padded = appNumber !== null ? String(appNumber).padStart(2, '0') : '01';
 
-                                const realTitle = await extractFullTitleFromDocxBuffer(ab, '');
-                                if (realTitle) {
-                                    if (docCategory === 'boqc') {
-                                        app.title = `Phụ lục ${app.code} - ${realTitle}`;
-                                    } else {
-                                        const isMau = app.title.toLowerCase().includes('mẫu') || item.name.toLowerCase().includes('mau');
-                                        app.title = `${isMau ? 'Mẫu' : 'Phụ lục'} ${app.code} - ${realTitle}`;
-                                    }
+                        const candidatePdfUrls = [];
+                        const candidateWordUrls = [];
+
+                        if (docCategory === 'boqc') {
+                            const basePdf = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Pdf/';
+                            const baseWord = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucBoQCHK/Word/';
+                            
+                            if (appRoman) {
+                                candidatePdfUrls.push({ url: `${basePdf}BoQCATHK_PHU%20LUC_${appRoman}.pdf`, name: `BoQCATHK_PHU LUC_${appRoman}.pdf` });
+                                candidatePdfUrls.push({ url: `${basePdf}BoQCATHK_PHU_LUC_${appRoman}.pdf`, name: `BoQCATHK_PHU_LUC_${appRoman}.pdf` });
+                                candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu%20Luc_Phu_luc_${appRoman}.docx`, name: `BoQCATHK_Phu Luc_Phu_luc_${appRoman}.docx` });
+                                candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu_Luc_Phu_luc_${appRoman}.docx`, name: `BoQCATHK_Phu_Luc_Phu_luc_${appRoman}.docx` });
+                            }
+                            if (appNumber !== null) {
+                                candidatePdfUrls.push({ url: `${basePdf}BoQCATHK_PHU%20LUC_${appNumber}.pdf`, name: `BoQCATHK_PHU LUC_${appNumber}.pdf` });
+                                candidateWordUrls.push({ url: `${baseWord}BoQCATHK_Phu%20Luc_Phu_luc_${appNumber}.docx`, name: `BoQCATHK_Phu Luc_Phu_luc_${appNumber}.docx` });
+                            }
+                        } else if (docCategory === 'nd221') {
+                            const basePdf = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/';
+                            const baseWord = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/';
+
+                            const isMau = app.title.toLowerCase().includes('mẫu') || String(app.code).toLowerCase().includes('mẫu');
+                            if (isMau && appNumber !== null) {
+                                candidatePdfUrls.push({ url: `${basePdf}ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`, name: `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf` });
+                                candidatePdfUrls.push({ url: `${basePdf}ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${appNumber}.pdf`, name: `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${appNumber}.pdf` });
+                                candidateWordUrls.push({ url: `${baseWord}Mau_${appNumber}.docx`, name: `Mau_${appNumber}.docx` });
+                                candidateWordUrls.push({ url: `${baseWord}Mau_${padded}.docx`, name: `Mau_${padded}.docx` });
+                            } else {
+                                if (appRoman) candidatePdfUrls.push({ url: `${basePdf}ND_221_2026_N%C4%90-CP-Phu%20Luc_${appRoman}.pdf`, name: `ND_221_2026_NĐ-CP-Phu Luc_${appRoman}.pdf` });
+                                if (appNumber !== null) candidateWordUrls.push({ url: `${baseWord}Phu_luc_${appNumber}.docx`, name: `Phu_luc_${appNumber}.docx` });
+                            }
+                        } else if (docCategory === 'nd223') {
+                            const basePdf = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Pdf/';
+                            const baseWord = 'https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND223/Word/';
+
+                            if (appNumber !== null && appNumber <= 27) {
+                                candidatePdfUrls.push({ url: `${basePdf}ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${padded}.pdf`, name: `ND_223_2026_NĐ-CP_Phu Luc_Mau ${padded}.pdf` });
+                                candidatePdfUrls.push({ url: `${basePdf}ND_223_2026_N%C4%90-CP_Phu%20Luc_Mau%20${appNumber}.pdf`, name: `ND_223_2026_NĐ-CP_Phu Luc_Mau ${appNumber}.pdf` });
+                                candidateWordUrls.push({ url: `${baseWord}Mau_So_${padded}.docx`, name: `Mau_So_${padded}.docx` });
+                                candidateWordUrls.push({ url: `${baseWord}Mau_So_${appNumber}.docx`, name: `Mau_So_${appNumber}.docx` });
+                            }
+                        }
+
+                        for (let item of candidatePdfUrls) {
+                            try {
+                                const testRes = await fetch(item.url);
+                                if (testRes.ok) {
+                                    app.pdfFileName = item.name;
+                                    app.pdfFileUrl = item.url;
+                                    break;
                                 }
-                                break;
-                            }
-                        } catch (e) {}
+                            } catch (e) {}
+                        }
+
+                        for (let item of candidateWordUrls) {
+                            try {
+                                const wordRes = await fetch(item.url);
+                                if (wordRes.ok) {
+                                    app.wordFileName = item.name;
+                                    app.wordFileUrl = item.url;
+                                    break;
+                                }
+                            } catch (e) {}
+                        }
                     }
                 }
             };
@@ -3185,7 +3246,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                     }
 
                     let cleanCode = rawCode.replace(/^(?:phụ\s*lục|phu\s*luc|mẫu\s*số|mau\s*so|mẫu|mau|appendix|pl)\s*/i, '').trim();
-
                     let dedupeKey = '';
                     let typePrefix = isMau ? 'Mẫu' : 'Phụ lục';
 
@@ -3246,6 +3306,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                         wordFileName: "",
                         wordFileUrl: ""
                     };
+                    ensureAppendixUrls(appendicesMap[itemKey], docName);
                 }
 
                 if (isBoQC) {
@@ -3264,6 +3325,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 wordFileName: "",
                                 wordFileUrl: ""
                             };
+                            ensureAppendixUrls(appendicesMap[itemKey], docName);
                         }
                     }
                 }
@@ -3271,10 +3333,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                 return appendicesMap;
             };
 
-// =========================================================================
-            // 🚀 BỘ QUÉT TÀI LIỆU CHUẨN XÁC 100% (QUÉT ĐỦ 59 MỤC MME/CAME + ĐẦY ĐỦ NỘI DUNG)
-            // =========================================================================
-           const processWordFileForDocx = (arrayBuffer, isMainDoc, targetDocId, newName, keepExistingAppendices = false, selectedMode = 'came') => {
+            const processWordFileForDocx = (arrayBuffer, isMainDoc, targetDocId, newName, keepExistingAppendices = false, selectedMode = 'came') => {
                 setImporting(true);
                 notify(`⏳ Đang bóc tách theo chế độ [${selectedMode.toUpperCase()}]: ${newName}...`);
 
@@ -3300,20 +3359,13 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                         }
 
                         const partRegex = new RegExp(`^\\s*(?:PHẦN|PHAN|PART|SECTION)[\\s\\.\\:\\-]*(${ROMAN_STRICT_PATTERN})[\\.\\:\\-\\–\\—\\s]*(.*)$`, 'i');
-                        const chapRegex = /^\s*(?:CHƯƠNG|CHUONG|CHAPTER)\s+([0-9]+|[IVXLCDM]+)\b(?!\.)[\.\:\-\–\—\s]*(.*)$/i;
+                        const chapRegex = /^\s*(?:CHƯƠNG|CHUONG|CHAPTER)\s+([0-9]+|[IVXLCDM]+)\b(?!\.)[\.\:\-\–\—\\s]*(.*)$/i;
                         const vnArtRegex = /^\s*(?:ĐIỀU|Điều|Ðiều|Điều|DIEU|Dieu)\s*[\.\:\-]?\s*(\d+[a-zA-Z]?(?:\.\d+)*)(?:[\.\:\-\–\—\s\t]+(.*))?$/i;
                         
                         const unitBlacklist = /^(?:hours?|fh|fc|flight\s+hours?|cycles?|days?|months?|years?|weeks?|mins?|minutes?|secs?|seconds?|kg|lbs?|mm|cm|inches?|in|ft|feet|meters?|m|psi|bar|volts?|v|amp|amps?|knots?|kts?|nm|percent|%|deg|°c|°f|ea|times?)\b/i;
-                        
-                        // Regex Option 2: Cấp 1.x (1.1, 1.2, 2.19, 5.3...)
                         const level2HeadingRegex = /^\s*(?:(?:SECTION|ARTICLE|CLAUSE|ITEM|MỤC)\s+)?([1-9]\d*\.\d+)(?!\.\d+)(?:[\.\:\-\–\—\s\t]+(.*))?$/i;
-                        
-                        // Regex Option 3: Cấp 1.x.x (MNT 1.9.1, ORG 1.1.1, FLT 1.1.1, 1.4.1...)
                         const level3HeadingRegex = /^\s*(?:(?:SECTION|ARTICLE|CLAUSE|ITEM|MỤC)\s+)?((?:(?:ORG|FLT|DSP|MNT|CAB|GRH|CGO|SEC|ISM)\s+)?[1-9]\d*\.\d+\.\d+(?:\.\d+)*)(?:[\.\:\-\–\—\s\t]+(.*))?$/i;
-                        
-                        // Regex nhận diện các BẢNG TIÊU CHUẨN IOSA (Table 1.1, Table 1.2, Table 4.1, Table 4.2...)
                         const tableHeadingRegex = /^\s*(?:TABLE|Table|BẢNG|Bảng)\s*([1-9]\d*(?:\.\d+)+)(?:[\.\:\-\–\—\s\t]+(.*))?$/i;
-
                         const boqcAppRegex = /^\s*(?:PHỤ\s*LỤC|PHU\s*LUC|APPENDIX|ATTACHMENT|PL)\s*([0-9A-Za-zIVXLCDM\.\_\-]+)?(?:[\.\:\-\–\—\s\t]+(.*))?$/i;
 
                         let currentPart = (mode === 'law') ? "Phần chung" : "PART 1";
@@ -3331,12 +3383,10 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             return cleanTitle ? `PART ${cleanNum} - ${cleanTitle}` : `PART ${cleanNum}`;
                         };
 
-                        // 1. Quét tìm tất cả các vị trí tiêu đề
                         for (let i = 0; i < allLines.length; i++) {
                             const line = allLines[i];
                             if (!line || /\d{1,2}\/\d{1,2}\/\d{2,4}/.test(line)) continue;
 
-                            // 1.A NHẬN DIỆN CÁC BẢNG (TABLE 1.1, TABLE 4.1...) CHO IOSA & MANUALS
                             const tMatch = line.match(tableHeadingRegex);
                             if (tMatch) {
                                 let tableNum = tMatch[1].trim();
@@ -3367,7 +3417,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 continue;
                             }
 
-                            // 1.B OPTION 1: ĐIỀU (LUẬT VN / VARS)
                             if (mode === 'law') {
                                 const vMatch = line.match(vnArtRegex);
                                 if (vMatch) {
@@ -3390,9 +3439,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                     });
                                     continue;
                                 }
-                            } 
-                            // 1.C OPTION 3: 1.X.X (IOSA ISM / MNT 1.9.1, ORG 1.1.1...)
-                            else if (mode === 'iosa') {
+                            } else if (mode === 'iosa') {
                                 const l3Match = line.match(level3HeadingRegex);
                                 const l2Match = line.match(level2HeadingRegex);
 
@@ -3436,9 +3483,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                         currentChapter = `Section ${code} - ${rawTitle}`;
                                     }
                                 }
-                            } 
-                            // 1.D OPTION 2: 1.X (CAME, MOE, MME, SOP)
-                            else {
+                            } else {
                                 const mMatch = line.match(level2HeadingRegex);
                                 if (mMatch) {
                                     let code = mMatch[1].trim();
@@ -3475,7 +3520,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 }
                             }
 
-                            // Quét Part
                             const pMatch = line.match(partRegex);
                             if (pMatch && line.length < 180 && !isSkippableAppendixLine(line)) {
                                 let rawPartNum = pMatch[1].trim();
@@ -3497,7 +3541,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 continue;
                             }
 
-                            // Quét Chapter
                             const cMatch = line.match(chapRegex);
                             if (cMatch && line.length < 220 && !isSkippableAppendixLine(line)) {
                                 let chapNum = cMatch[1].toUpperCase().trim();
@@ -3529,7 +3572,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             }
                         }
 
-                        // 2. Khử trùng lặp tiêu đề
                         const groupedByCode = {};
                         rawPositions.forEach(pos => {
                             if (!groupedByCode[pos.num]) groupedByCode[pos.num] = [];
@@ -3564,7 +3606,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                         const validAppendixStart = appendixPositions.find(app => app.index > lastArtIdx && app.index < allLines.length);
                         const firstAppendixIndex = validAppendixStart ? validAppendixStart.index : allLines.length;
 
-                        // 3. Trích xuất toàn văn nội dung
                         for (let i = 0; i < articlePositions.length; i++) {
                             const curr = articlePositions[i];
                             const startIdx = curr.index;
@@ -3616,7 +3657,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             };
                         }
 
-                        // Fallback an toàn nếu không tìm thấy mục
                         if (Object.keys(parsedArticles).length === 0) {
                             parsedArticles["1.0"] = {
                                 id: "1.0",
@@ -3653,6 +3693,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 wordFileName: "",
                                 wordFileUrl: ""
                             };
+                            ensureAppendixUrls(extractedAppendices[appKey], newName);
                         }
 
                         const rawAppendixText = appendixPositions.length > 0 ? allLines.slice(firstAppendixIndex).join('\n').trim() : "";
@@ -3666,6 +3707,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             appendixAiData: rawAppendixText
                         };
 
+                        GLOBAL_DOCS_STORE[targetDocId] = fullPackage;
                         await WorkspaceDB.put(targetDocId, fullPackage);
 
                         let currentStoredMeta = await WorkspaceDB.get('docs_meta') || [];
@@ -3724,7 +3766,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                 notify(`⏳ Đang nạp CSDL Phụ lục từ "${fileName}"...`);
 
                 const saveAppendixTextToDB = async (text) => {
-                    let pkg = await WorkspaceDB.get(activeDocId) || AviationDB.getRawPackage();
+                    let pkg = GLOBAL_DOCS_STORE[activeDocId] || await WorkspaceDB.get(activeDocId) || AviationDB.getRawPackage();
                     
                     pkg.appendixAiData = (text || '').trim();
                     pkg.name = activeDocName;
@@ -3735,6 +3777,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                         pkg.appendices = titlesOnlyMap;
                     }
 
+                    GLOBAL_DOCS_STORE[activeDocId] = pkg;
                     await WorkspaceDB.put(activeDocId, pkg);
                     AviationDB.setLoadedPackage(pkg);
                     setDocData({ ...pkg });
@@ -3758,7 +3801,6 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                 e.target.value = '';
             };
 
-            
             const handleNewDocUpload = (e) => {
                 const file = e.target.files && e.target.files[0];
                 if (!file) return;
@@ -3782,7 +3824,9 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                         let currentStoredMeta = await WorkspaceDB.get('docs_meta') || docs;
                         const newDocs = [...currentStoredMeta.filter(d => d.id !== targetId), { id: targetId, name: newName, type: 'pdf' }];
                         
-                        await WorkspaceDB.put(targetId, { pdfUrl: base64, name: newName });
+                        const pdfPkg = { pdfUrl: base64, name: newName };
+                        GLOBAL_DOCS_STORE[targetId] = pdfPkg;
+                        await WorkspaceDB.put(targetId, pdfPkg);
                         await WorkspaceDB.put('docs_meta', newDocs);
                         setDocs(newDocs);
 
@@ -3827,10 +3871,11 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                 const newTitle = prompt("Nhập tên / tiêu đề mới cho Phụ lục:", currentApp ? currentApp.title : "");
                 if (!newTitle || newTitle.trim() === "") return;
 
-                const pkg = AviationDB.getRawPackage();
+                const pkg = GLOBAL_DOCS_STORE[activeDocId] || AviationDB.getRawPackage();
                 if (pkg.appendices && pkg.appendices[appKey]) {
                     pkg.appendices[appKey].title = newTitle.trim();
                     pkg.name = activeDocName;
+                    GLOBAL_DOCS_STORE[activeDocId] = pkg;
                     WorkspaceDB.put(activeDocId, pkg).then(() => {
                         AviationDB.setLoadedPackage(pkg);
                         setDocData({ ...pkg });
@@ -3840,12 +3885,13 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
             };
 
             const handleSaveEdit = (id) => {
-                const pkg = AviationDB.getRawPackage();
+                const pkg = GLOBAL_DOCS_STORE[activeDocId] || AviationDB.getRawPackage();
                 if (pkg.articles && pkg.articles[id]) {
                     pkg.articles[id].htmlContent = `<div style="padding: 10px; font-family: 'Times New Roman', serif;">${editContent.split('\n').map(p => `<p style="margin-bottom:8px;">${p}</p>`).join('')}</div>`;
                     pkg.articles[id].plainText = editContent;
                     pkg.name = activeDocName;
-                     
+                    
+                    GLOBAL_DOCS_STORE[activeDocId] = pkg;
                     WorkspaceDB.put(activeDocId, pkg).then(() => {
                         AviationDB.setLoadedPackage(pkg);
                         setDocData({ ...pkg });
@@ -3859,10 +3905,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                 let countPdf = 0;
                 let countWord = 0;
                 for (const d of docs) {
-                    let pkg = (d.id === activeDocId && docData) ? docData : await WorkspaceDB.get(d.id);
-                    if (!pkg && EMBEDDED_WORKSPACE && EMBEDDED_WORKSPACE.data) {
-                        pkg = EMBEDDED_WORKSPACE.data[d.id];
-                    }
+                    let pkg = GLOBAL_DOCS_STORE[d.id] || (d.id === activeDocId ? docData : await WorkspaceDB.get(d.id));
                     if (pkg && pkg.appendices) {
                         Object.values(pkg.appendices).forEach(app => {
                             if (app.pdfFileUrl) countPdf++;
@@ -3942,7 +3985,12 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
             const pagedArticles = useMemo(() => filtered.slice((page - 1) * 12, page * 12), [filtered, page]);
             const totalPages = Math.ceil(filtered.length / 12) || 1;
-            const filteredAppendices = useMemo(() => AviationDB.queryAppendices(appendixSearch), [appendixSearch, appendixCount, docData]);
+            
+            const filteredAppendices = useMemo(() => {
+                const list = AviationDB.queryAppendices(appendixSearch);
+                list.forEach(app => ensureAppendixUrls(app, activeDocName));
+                return list;
+            }, [appendixSearch, appendixCount, docData, activeDocName]);
 
             const currentArticle = AviationDB.getArticle(singleId);
             const currentArtMode = currentArticle ? (articleViewModes[`${activeDocId}_art_${currentArticle.id}`] || globalLangMode[activeDocId] || 'original') : 'original';
@@ -3984,7 +4032,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                         {/* MODAL TÙY CHỌN TẢI FILE PHỤ LỤC */}
                         {downloadChoiceModal.isOpen && downloadChoiceModal.app && (() => {
-                            const app = downloadChoiceModal.app;
+                            const app = ensureAppendixUrls(downloadChoiceModal.app, activeDocName);
                             const hasPdf = Boolean(app.pdfFileUrl && String(app.pdfFileUrl).trim());
                             const hasWord = Boolean(app.wordFileUrl && String(app.wordFileUrl).trim());
 
@@ -4604,7 +4652,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                 </div>
                                             ) : (singleAppendixKey && AviationDB.getAppendicesMap()?.[singleAppendixKey]) ? (() => {
                                                 const appMap = AviationDB.getAppendicesMap();
-                                                const app = appMap[singleAppendixKey];
+                                                const app = ensureAppendixUrls(appMap[singleAppendixKey], activeDocName);
                                                 if (!app) return null;
 
                                                 return (
@@ -4651,31 +4699,34 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                 );
                                             })() : (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                    {filteredAppendices && filteredAppendices.map(app => (
-                                                        <div key={app.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border flex flex-col justify-between shadow-sm hover:border-aviation-400 transition">
-                                                            <div>
-                                                                <div className="flex justify-between items-center mb-1">
-                                                                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded ${isCurrentBoQC ? 'text-blue-700 bg-blue-50' : (app.title.toLowerCase().includes('mẫu') || isCurrentND223) ? 'text-amber-700 bg-amber-50' : 'text-blue-700 bg-blue-50'}`}>
-                                                                        {getAppendixBadgeLabel(app, isCurrentBoQC, isCurrentND223)}
-                                                                    </span>
+                                                    {filteredAppendices && filteredAppendices.map(app => {
+                                                        ensureAppendixUrls(app, activeDocName);
+                                                        return (
+                                                            <div key={app.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border flex flex-col justify-between shadow-sm hover:border-aviation-400 transition">
+                                                                <div>
+                                                                    <div className="flex justify-between items-center mb-1">
+                                                                        <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded ${isCurrentBoQC ? 'text-blue-700 bg-blue-50' : (app.title.toLowerCase().includes('mẫu') || isCurrentND223) ? 'text-amber-700 bg-amber-50' : 'text-blue-700 bg-blue-50'}`}>
+                                                                            {getAppendixBadgeLabel(app, isCurrentBoQC, isCurrentND223)}
+                                                                        </span>
+                                                                    </div>
+                                                                    <h4 className="font-bold text-xs my-1.5 line-clamp-2">{app.title}</h4>
+                                                                    <p className="text-xs text-slate-500 line-clamp-2 mb-2">{app.plainText || (app.pdfFileName ? `📄 ${app.pdfFileName}` : '(Đã liên kết dữ liệu từ GitHub)')}</p>
                                                                 </div>
-                                                                <h4 className="font-bold text-xs my-1.5 line-clamp-2">{app.title}</h4>
-                                                                <p className="text-xs text-slate-500 line-clamp-2 mb-2">{app.plainText || (app.pdfFileName ? `📄 ${app.pdfFileName}` : '(Đã liên kết dữ liệu từ GitHub)')}</p>
+                                                                <div className="pt-2 border-t flex items-center justify-between">
+                                                                    <button onClick={() => { setJumpHistory(null); setSingleAppendixKey(app.id); }} className="text-xs text-aviation-600 font-bold hover:underline">Xem PDF / Chi tiết &rarr;</button>
+                                                                    <button 
+                                                                        onClick={(e) => { 
+                                                                            e.stopPropagation(); 
+                                                                            handleDownloadClick(app);
+                                                                        }} 
+                                                                        className="px-2.5 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow transition flex items-center gap-1"
+                                                                    >
+                                                                        <span>📥 Tải về</span>
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                            <div className="pt-2 border-t flex items-center justify-between">
-                                                                <button onClick={() => { setJumpHistory(null); setSingleAppendixKey(app.id); }} className="text-xs text-aviation-600 font-bold hover:underline">Xem PDF / Chi tiết &rarr;</button>
-                                                                <button 
-                                                                    onClick={(e) => { 
-                                                                        e.stopPropagation(); 
-                                                                        handleDownloadClick(app);
-                                                                    }} 
-                                                                    className="px-2.5 py-1 text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded shadow transition flex items-center gap-1"
-                                                                >
-                                                                    <span>📥 Tải về</span>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
@@ -5063,224 +5114,222 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                         )}
 
                         {/* MODAL QUẢN LÝ NẠP TÀI LIỆU CÓ 3 OPTION BÓC TÁCH */}
-                    {uploadMenuModal && (
-                        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in">
-                                <div className="bg-aviation-800 text-white p-4 flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">📚</span>
-                                        <h3 className="text-sm font-bold">Nạp Tài Liệu & Chọn Cấu Trúc Bóc Tách</h3>
-                                    </div>
-                                    <button onClick={() => setUploadMenuModal(false)} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                </div>
-
-                                <div className="p-5 space-y-4 text-xs">
-                                    <div>
-                                        <label className="font-bold text-slate-700 dark:text-slate-300 block mb-2">
-                                            ⚙️ Chọn cấu trúc tài liệu cần bóc tách:
-                                        </label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                            {/* OPTION 1 */}
-                                            <div 
-                                                onClick={() => setImportMode('law')}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'law' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
-                                            >
-                                                <div>
-                                                    <div className="text-base mb-1">⚖️ Option 1</div>
-                                                    <div className="font-extrabold text-xs">Điều (Luật VN)</div>
-                                                </div>
-                                                <div className="text-[10px] opacity-75 mt-1.5">VARs, Luật HK, Nghị định 221, 223, TT...</div>
-                                            </div>
-
-                                            {/* OPTION 2 */}
-                                            <div 
-                                                onClick={() => setImportMode('came')}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'came' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
-                                            >
-                                                <div>
-                                                    <div className="text-base mb-1">📑 Option 2</div>
-                                                    <div className="font-extrabold text-xs">Cấp 1.x (Manuals)</div>
-                                                </div>
-                                                <div className="text-[10px] opacity-75 mt-1.5">CAME, MOE, MME, MOPM, SOP, SMM...</div>
-                                            </div>
-
-                                            {/* OPTION 3 */}
-                                            <div 
-                                                onClick={() => setImportMode('iosa')}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'iosa' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
-                                            >
-                                                <div>
-                                                    <div className="text-base mb-1">🎯 Option 3</div>
-                                                    <div className="font-extrabold text-xs">Cấp 1.x.x (IOSA)</div>
-                                                </div>
-                                                <div className="text-[10px] opacity-75 mt-1.5">IOSA ISM, Chi tiết tiểu mục 1.4.1, 2.1.3...</div>
-                                            </div>
+                        {uploadMenuModal && (
+                            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in">
+                                    <div className="bg-aviation-800 text-white p-4 flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">📚</span>
+                                            <h3 className="text-sm font-bold">Nạp Tài Liệu & Chọn Cấu Trúc Bóc Tách</h3>
                                         </div>
+                                        <button onClick={() => setUploadMenuModal(false)} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
                                     </div>
 
-                                    {/* NÚT CHỌN FILE */}
-                                    <label className="w-full p-4 rounded-xl border-2 border-dashed border-aviation-400 hover:border-aviation-600 bg-aviation-50/50 dark:bg-aviation-950/30 flex flex-col items-center justify-center cursor-pointer transition">
-                                        <span className="text-3xl mb-1">📤</span>
-                                        <span className="font-bold text-aviation-700 dark:text-aviation-300 text-sm">
-                                            Bấm để chọn file Word (.docx) hoặc PDF
-                                        </span>
-                                        <span className="text-slate-400 text-[11px] mt-1">
-                                            Đang chọn: <strong>{importMode === 'law' ? 'Option 1: Điều (Luật VN)' : importMode === 'came' ? 'Option 2: Cấp 1.x (CAME/SOP)' : 'Option 3: Cấp 1.x.x (IOSA ISM)'}</strong>
-                                        </span>
-                                        <input 
-                                            type="file" 
-                                            accept=".docx,.pdf" 
-                                            className="hidden" 
-                                            onClick={(e) => { e.target.value = ''; }}
-                                            onChange={handleNewDocUpload} 
-                                        />
-                                    </label>
-
-                                    {/* DANH SÁCH TÀI LIỆU ĐÃ LƯU TRONG MÁY */}
-                                    {savedRegistry.length > 0 && (
-                                        <div className="space-y-2 pt-2 border-t">
-                                            <div className="font-bold text-slate-700 dark:text-slate-300">Tài liệu đã lưu trong CSDL máy:</div>
-                                            <div className="max-h-40 overflow-y-auto space-y-1.5 custom-scrollbar">
-                                                {savedRegistry.map(reg => (
-                                                    <div key={reg.id} className="p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-750 flex items-center justify-between">
-                                                        <div className="truncate pr-2">
-                                                            <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">{reg.name}</div>
-                                                            <div className="text-[10px] text-slate-400">{reg.type === 'pdf' ? 'Tài liệu PDF' : `${reg.count} mục`}</div>
-                                                        </div>
-                                                        <div className="flex items-center gap-1.5 shrink-0">
-                                                            <button 
-                                                                onClick={async () => {
-                                                                    let currentStoredMeta = await WorkspaceDB.get('docs_meta') || docs;
-                                                                    if (!currentStoredMeta.some(d => d.id === reg.id)) {
-                                                                        const updated = [...currentStoredMeta, { id: reg.id, name: reg.name, type: reg.type }];
-                                                                        setDocs(updated);
-                                                                        await WorkspaceDB.put('docs_meta', updated);
-                                                                    }
-                                                                    await switchDoc(reg.id);
-                                                                    setUploadMenuModal(false);
-                                                                }}
-                                                                className="px-2.5 py-1 bg-aviation-600 text-white font-bold rounded text-[11px]"
-                                                            >
-                                                                Mở tab
-                                                            </button>
-                                                            {reg.id !== 'main' && (
-                                                                <button onClick={() => deleteSpecificDoc(reg.id, reg.name)} className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950/50 rounded">🗑️</button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 text-right">
-                                    <button onClick={() => setUploadMenuModal(false)} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-		{/* MODAL NẠP LẠI CHO TAB CỤ THỂ CÓ CHỌN 3 OPTION */}
-                    {reloadTabModal.isOpen && reloadTabModal.doc && (
-                        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in">
-                                <div className="bg-aviation-800 text-white p-4 flex justify-between items-center">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xl">🔄</span>
+                                    <div className="p-5 space-y-4 text-xs">
                                         <div>
-                                            <h3 className="text-sm font-bold">Nạp Lại & Thay Thế File Cho Tab</h3>
-                                            <div className="text-[11px] text-yellow-300 truncate max-w-xs">{reloadTabModal.doc.name}</div>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => setReloadTabModal({ isOpen: false, doc: null })} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                </div>
+                                            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-2">
+                                                ⚙️ Chọn cấu trúc tài liệu cần bóc tách:
+                                            </label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                                <div 
+                                                    onClick={() => setImportMode('law')}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'law' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                                                >
+                                                    <div>
+                                                        <div className="text-base mb-1">⚖️ Option 1</div>
+                                                        <div className="font-extrabold text-xs">Điều (Luật VN)</div>
+                                                    </div>
+                                                    <div className="text-[10px] opacity-75 mt-1.5">VARs, Luật HK, Nghị định 221, 223, TT...</div>
+                                                </div>
 
-                                <div className="p-5 space-y-4 text-xs">
-                                    <div>
-                                        <label className="font-bold text-slate-700 dark:text-slate-300 block mb-2">
-                                            ⚙️ Chọn cấu trúc tài liệu cần bóc tách lại:
+                                                <div 
+                                                    onClick={() => setImportMode('came')}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'came' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                                                >
+                                                    <div>
+                                                        <div className="text-base mb-1">📑 Option 2</div>
+                                                        <div className="font-extrabold text-xs">Cấp 1.x (Manuals)</div>
+                                                    </div>
+                                                    <div className="text-[10px] opacity-75 mt-1.5">CAME, MOE, MME, MOPM, SOP, SMM...</div>
+                                                </div>
+
+                                                <div 
+                                                    onClick={() => setImportMode('iosa')}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'iosa' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                                                >
+                                                    <div>
+                                                        <div className="text-base mb-1">🎯 Option 3</div>
+                                                        <div className="font-extrabold text-xs">Cấp 1.x.x (IOSA)</div>
+                                                    </div>
+                                                    <div className="text-[10px] opacity-75 mt-1.5">IOSA ISM, Chi tiết tiểu mục 1.4.1, 2.1.3...</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <label className="w-full p-4 rounded-xl border-2 border-dashed border-aviation-400 hover:border-aviation-600 bg-aviation-50/50 dark:bg-aviation-950/30 flex flex-col items-center justify-center cursor-pointer transition">
+                                            <span className="text-3xl mb-1">📤</span>
+                                            <span className="font-bold text-aviation-700 dark:text-aviation-300 text-sm">
+                                                Bấm để chọn file Word (.docx) hoặc PDF
+                                            </span>
+                                            <span className="text-slate-400 text-[11px] mt-1">
+                                                Đang chọn: <strong>{importMode === 'law' ? 'Option 1: Điều (Luật VN)' : importMode === 'came' ? 'Option 2: Cấp 1.x (CAME/SOP)' : 'Option 3: Cấp 1.x.x (IOSA ISM)'}</strong>
+                                            </span>
+                                            <input 
+                                                type="file" 
+                                                accept=".docx,.pdf" 
+                                                className="hidden" 
+                                                onClick={(e) => { e.target.value = ''; }}
+                                                onChange={handleNewDocUpload} 
+                                            />
                                         </label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                            <div 
-                                                onClick={() => setImportMode('law')}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'law' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
-                                            >
-                                                <div>
-                                                    <div className="text-base mb-1">⚖️ Option 1</div>
-                                                    <div className="font-extrabold text-xs">Điều (Luật VN)</div>
-                                                </div>
-                                                <div className="text-[10px] opacity-75 mt-1.5">VARs, Luật HK, Nghị định 221, 223, TT...</div>
-                                            </div>
 
-                                            <div 
-                                                onClick={() => setImportMode('came')}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'came' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
-                                            >
-                                                <div>
-                                                    <div className="text-base mb-1">📑 Option 2</div>
-                                                    <div className="font-extrabold text-xs">Cấp 1.x (Manuals)</div>
+                                        {savedRegistry.length > 0 && (
+                                            <div className="space-y-2 pt-2 border-t">
+                                                <div className="font-bold text-slate-700 dark:text-slate-300">Tài liệu đã lưu trong CSDL máy:</div>
+                                                <div className="max-h-40 overflow-y-auto space-y-1.5 custom-scrollbar">
+                                                    {savedRegistry.map(reg => (
+                                                        <div key={reg.id} className="p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-750 flex items-center justify-between">
+                                                            <div className="truncate pr-2">
+                                                                <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">{reg.name}</div>
+                                                                <div className="text-[10px] text-slate-400">{reg.type === 'pdf' ? 'Tài liệu PDF' : `${reg.count} mục`}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                                <button 
+                                                                    onClick={async () => {
+                                                                        let currentStoredMeta = await WorkspaceDB.get('docs_meta') || docs;
+                                                                        if (!currentStoredMeta.some(d => d.id === reg.id)) {
+                                                                            const updated = [...currentStoredMeta, { id: reg.id, name: reg.name, type: reg.type }];
+                                                                            setDocs(updated);
+                                                                            await WorkspaceDB.put('docs_meta', updated);
+                                                                        }
+                                                                        await switchDoc(reg.id);
+                                                                        setUploadMenuModal(false);
+                                                                    }}
+                                                                    className="px-2.5 py-1 bg-aviation-600 text-white font-bold rounded text-[11px]"
+                                                                >
+                                                                    Mở tab
+                                                                </button>
+                                                                {reg.id !== 'main' && (
+                                                                    <button onClick={() => deleteSpecificDoc(reg.id, reg.name)} className="p-1 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950/50 rounded">🗑️</button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div className="text-[10px] opacity-75 mt-1.5">CAME, MOE, MME, MOPM, SOP, SMM...</div>
                                             </div>
-
-                                            <div 
-                                                onClick={() => setImportMode('iosa')}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'iosa' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
-                                            >
-                                                <div>
-                                                    <div className="text-base mb-1">🎯 Option 3</div>
-                                                    <div className="font-extrabold text-xs">Cấp 1.x.x (IOSA)</div>
-                                                </div>
-                                                <div className="text-[10px] opacity-75 mt-1.5">IOSA ISM, Chi tiết tiểu mục 1.4.1, 2.1.3...</div>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
-
-                                    {/* NÚT CHỌN FILE NẠP ĐÈ CHO TAB */}
-                                    <label className="w-full p-4 rounded-xl border-2 border-dashed border-aviation-400 hover:border-aviation-600 bg-aviation-50/50 dark:bg-aviation-950/30 flex flex-col items-center justify-center cursor-pointer transition">
-                                        <span className="text-3xl mb-1">📤</span>
-                                        <span className="font-bold text-aviation-700 dark:text-aviation-300 text-sm">
-                                            Bấm để chọn file thay thế (.docx / .pdf)
-                                        </span>
-                                        <span className="text-slate-400 text-[11px] mt-1">
-                                            Đang chọn: <strong>{importMode === 'law' ? 'Option 1: Điều (Luật VN)' : importMode === 'came' ? 'Option 2: Cấp 1.x (CAME/SOP)' : 'Option 3: Cấp 1.x.x (IOSA ISM)'}</strong>
-                                        </span>
-                                        <input 
-                                            type="file" 
-                                            accept=".docx,.pdf" 
-                                            className="hidden" 
-                                            onClick={(e) => { e.target.value = ''; }}
-                                            onChange={async (e) => {
-                                                const file = e.target.files && e.target.files[0];
-                                                if (!file) return;
-                                                const targetDoc = reloadTabModal.doc;
-                                                setReloadTabModal({ isOpen: false, doc: null });
-
-                                                if (file.name.toLowerCase().endsWith('.pdf')) {
-                                                    const reader = new FileReader();
-                                                    reader.onload = async (ev) => {
-                                                        await WorkspaceDB.put(targetDoc.id, { pdfUrl: ev.target.result, name: file.name });
-                                                        await loadDocData(targetDoc.id);
-                                                        notify(`✅ Đã thay thế file PDF "${file.name}"!`);
-                                                    };
-                                                    reader.readAsDataURL(file);
-                                                } else {
-                                                    const reader = new FileReader();
-                                                    reader.onload = (ev) => {
-                                                        processWordFileForDocx(ev.target.result, targetDoc.id === 'main', targetDoc.id, file.name, false, importMode);
-                                                    };
-                                                    reader.readAsArrayBuffer(file);
-                                                }
-                                                e.target.value = '';
-                                            }} 
-                                        />
-                                    </label>
-                                </div>
-                                <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 text-right">
-                                    <button onClick={() => setReloadTabModal({ isOpen: false, doc: null })} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
+                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 text-right">
+                                        <button onClick={() => setUploadMenuModal(false)} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {/* MODAL NẠP LẠI CHO TAB CỤ THỂ CÓ CHỌN 3 OPTION */}
+                        {reloadTabModal.isOpen && reloadTabModal.doc && (
+                            <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-xl w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden animate-in fade-in zoom-in">
+                                    <div className="bg-aviation-800 text-white p-4 flex justify-between items-center">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xl">🔄</span>
+                                            <div>
+                                                <h3 className="text-sm font-bold">Nạp Lại & Thay Thế File Cho Tab</h3>
+                                                <div className="text-[11px] text-yellow-300 truncate max-w-xs">{reloadTabModal.doc.name}</div>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => setReloadTabModal({ isOpen: false, doc: null })} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
+                                    </div>
+
+                                    <div className="p-5 space-y-4 text-xs">
+                                        <div>
+                                            <label className="font-bold text-slate-700 dark:text-slate-300 block mb-2">
+                                                ⚙️ Chọn cấu trúc tài liệu cần bóc tách lại:
+                                            </label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                                <div 
+                                                    onClick={() => setImportMode('law')}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'law' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                                                >
+                                                    <div>
+                                                        <div className="text-base mb-1">⚖️ Option 1</div>
+                                                        <div className="font-extrabold text-xs">Điều (Luật VN)</div>
+                                                    </div>
+                                                    <div className="text-[10px] opacity-75 mt-1.5">VARs, Luật HK, Nghị định 221, 223, TT...</div>
+                                                </div>
+
+                                                <div 
+                                                    onClick={() => setImportMode('came')}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'came' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                                                >
+                                                    <div>
+                                                        <div className="text-base mb-1">📑 Option 2</div>
+                                                        <div className="font-extrabold text-xs">Cấp 1.x (Manuals)</div>
+                                                    </div>
+                                                    <div className="text-[10px] opacity-75 mt-1.5">CAME, MOE, MME, MOPM, SOP, SMM...</div>
+                                                </div>
+
+                                                <div 
+                                                    onClick={() => setImportMode('iosa')}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition flex flex-col justify-between ${importMode === 'iosa' ? 'border-aviation-600 bg-aviation-50 dark:bg-aviation-950/60 font-bold text-aviation-800 dark:text-aviation-200 shadow-sm' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300'}`}
+                                                >
+                                                    <div>
+                                                        <div className="text-base mb-1">🎯 Option 3</div>
+                                                        <div className="font-extrabold text-xs">Cấp 1.x.x (IOSA)</div>
+                                                    </div>
+                                                    <div className="text-[10px] opacity-75 mt-1.5">IOSA ISM, Chi tiết tiểu mục 1.4.1, 2.1.3...</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <label className="w-full p-4 rounded-xl border-2 border-dashed border-aviation-400 hover:border-aviation-600 bg-aviation-50/50 dark:bg-aviation-950/30 flex flex-col items-center justify-center cursor-pointer transition">
+                                            <span className="text-3xl mb-1">📤</span>
+                                            <span className="font-bold text-aviation-700 dark:text-aviation-300 text-sm">
+                                                Bấm để chọn file thay thế (.docx / .pdf)
+                                            </span>
+                                            <span className="text-slate-400 text-[11px] mt-1">
+                                                Đang chọn: <strong>{importMode === 'law' ? 'Option 1: Điều (Luật VN)' : importMode === 'came' ? 'Option 2: Cấp 1.x (CAME/SOP)' : 'Option 3: Cấp 1.x.x (IOSA ISM)'}</strong>
+                                            </span>
+                                            <input 
+                                                type="file" 
+                                                accept=".docx,.pdf" 
+                                                className="hidden" 
+                                                onClick={(e) => { e.target.value = ''; }}
+                                                onChange={async (e) => {
+                                                    const file = e.target.files && e.target.files[0];
+                                                    if (!file) return;
+                                                    const targetDoc = reloadTabModal.doc;
+                                                    setReloadTabModal({ isOpen: false, doc: null });
+
+                                                    if (file.name.toLowerCase().endsWith('.pdf')) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = async (ev) => {
+                                                            const pdfPkg = { pdfUrl: ev.target.result, name: file.name };
+                                                            GLOBAL_DOCS_STORE[targetDoc.id] = pdfPkg;
+                                                            await WorkspaceDB.put(targetDoc.id, pdfPkg);
+                                                            await loadDocData(targetDoc.id);
+                                                            notify(`✅ Đã thay thế file PDF "${file.name}"!`);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    } else {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (ev) => {
+                                                            processWordFileForDocx(ev.target.result, targetDoc.id === 'main', targetDoc.id, file.name, false, importMode);
+                                                        };
+                                                        reader.readAsArrayBuffer(file);
+                                                    }
+                                                    e.target.value = '';
+                                                }} 
+                                            />
+                                        </label>
+                                    </div>
+                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 text-right">
+                                        <button onClick={() => setReloadTabModal({ isOpen: false, doc: null })} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* MODAL ĐÓNG GÓI OFFLINE */}
                         {exportModal && (
                             <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -5332,417 +5381,419 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                     <div className="p-5 space-y-4 text-xs">
                                         <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 rounded-xl space-y-2">
                                             <div className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
-                                            <span>🌐</span>
-                                            <span>Khôi phục CSDL Chuẩn Từ GitHub</span>
-                                        </div>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                            Tải lại toàn bộ dữ liệu gốc từ máy chủ GitHub nếu bạn lỡ xóa hoặc dữ liệu trên máy bị lỗi:
-                                        </p>
-                                        <button 
-                                            onClick={async () => {
-                                                const ok = await reloadDataFromGitHub();
-                                                if (ok) setResetModal(false);
-                                            }}
-                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow text-xs flex items-center gap-1.5"
-                                        >
-                                            <span>🔄</span>
-                                            <span>Nạp lại dữ liệu gốc từ GitHub</span>
-                                        </button>
-                                    </div>
-
-                                    <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl space-y-2">
-                                        <div className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
-                                            <span>📄</span>
-                                            <span>Tài liệu đang mở: <strong>{activeDocName}</strong></span>
-                                        </div>
-                                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                            Xóa toàn bộ điều khoản và phụ lục của tài liệu này để nạp lại từ đầu:
-                                        </p>
-                                        <button 
-                                            onClick={async () => {
-                                                if (!confirm(`Bạn có chắc muốn xóa/reset nội dung của "${activeDocName}"?`)) return;
-                                                if (activeDocId === 'main') {
-                                                    await WorkspaceDB.put('main', { name: 'Bộ Quy Chế (Chính)', articles: {}, parts: [], appendices: {} });
-                                                    AviationDB.setLoadedPackage(null);
-                                                    setDocData(null);
-                                                    setDataCount(0);
-                                                    setAppendixCount(0);
-                                                } else {
-                                                    await deleteSpecificDoc(activeDocId, activeDocName);
-                                                }
-                                                setResetModal(false);
-                                                notify(`✅ Đã reset tài liệu "${activeDocName}"!`);
-                                            }}
-                                            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg shadow text-xs"
-                                        >
-                                            🗑️ Xóa dữ liệu tài liệu này
-                                        </button>
-                                    </div>
-
-                                    {savedRegistry.length > 0 && (
-                                        <div className="space-y-1.5">
-                                            <div className="font-bold text-slate-700 dark:text-slate-300">Xóa riêng từng tài liệu trong máy:</div>
-                                            <div className="max-h-36 overflow-y-auto space-y-1 custom-scrollbar">
-                                                {savedRegistry.map(reg => (
-                                                    <div key={reg.id} className="p-2 rounded border bg-slate-50 dark:bg-slate-750 flex items-center justify-between">
-                                                        <span className="truncate max-w-[260px] font-medium">{reg.name}</span>
-                                                        {reg.id !== 'main' ? (
-                                                            <button onClick={() => deleteSpecificDoc(reg.id, reg.name)} className="text-rose-600 font-bold hover:underline">Xóa</button>
-                                                        ) : (
-                                                            <span className="text-slate-400 text-[10px]">Tài liệu chính</span>
-                                                        )}
-                                                    </div>
-                                                ))}
+                                                <span>🌐</span>
+                                                <span>Khôi phục CSDL Chuẩn Từ GitHub</span>
                                             </div>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                Tải lại toàn bộ dữ liệu gốc từ máy chủ GitHub nếu bạn lỡ xóa hoặc dữ liệu trên máy bị lỗi:
+                                            </p>
+                                            <button 
+                                                onClick={async () => {
+                                                    const ok = await reloadDataFromGitHub();
+                                                    if (ok) setResetModal(false);
+                                                }}
+                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg shadow text-xs flex items-center gap-1.5"
+                                            >
+                                                <span>🔄</span>
+                                                <span>Nạp lại dữ liệu gốc từ GitHub</span>
+                                            </button>
                                         </div>
-                                    )}
 
-                                    <button 
-                                        onClick={clearAllDatabase} 
-                                        className="w-full p-3 bg-red-100/70 dark:bg-red-950/60 border border-red-300 dark:border-red-800 rounded-xl text-left hover:bg-red-200 transition"
-                                    >
-                                        <div className="font-bold text-red-800 dark:text-red-200">⚠️ Xóa Sạch Toàn Bộ CSDL (Factory Reset)</div>
-                                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Xóa trắng tất cả tài liệu đã nạp để làm mới hoàn toàn</div>
-                                    </button>
-                                </div>
-                                <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 text-right">
-                                    <button onClick={() => setResetModal(false)} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* MODAL CỬA SỔ SO SÁNH ĐỐI CHIẾU 2 TÀI LIỆU */}
-                    {compareModalState.isOpen && (
-                        <div className="fixed inset-0 z-[86] bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in zoom-in">
-                            <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-6xl h-[90vh] shadow-2xl border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden">
-                                <div className="bg-gradient-to-r from-indigo-800 to-aviation-800 text-white p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
-                                    <div>
-                                        <h3 className="font-bold text-sm sm:text-base flex items-center gap-2">
-                                            <span>⚖️</span>
-                                            <span>Bảng So Sánh & Đối Chiếu Sự Khác Biệt Giữa 2 Tài Liệu</span>
-                                        </h3>
-                                        <div className="text-[11px] text-indigo-200 mt-0.5">
-                                            Tài liệu gốc (A): <strong>{compareModalState.sourceDocName}</strong> ➔ Đối chiếu (B): <strong>{compareModalState.targetDocName}</strong>
+                                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl space-y-2">
+                                            <div className="font-bold text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                                                <span>📄</span>
+                                                <span>Tài liệu đang mở: <strong>{activeDocName}</strong></span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                                Xóa toàn bộ điều khoản và phụ lục của tài liệu này để nạp lại từ đầu:
+                                            </p>
+                                            <button 
+                                                onClick={async () => {
+                                                    if (!confirm(`Bạn có chắc muốn xóa/reset nội dung của "${activeDocName}"?`)) return;
+                                                    if (activeDocId === 'main') {
+                                                        const emptyMain = { name: 'Bộ Quy Chế (Chính)', articles: {}, parts: [], appendices: {} };
+                                                        GLOBAL_DOCS_STORE['main'] = emptyMain;
+                                                        await WorkspaceDB.put('main', emptyMain);
+                                                        AviationDB.setLoadedPackage(null);
+                                                        setDocData(null);
+                                                        setDataCount(0);
+                                                        setAppendixCount(0);
+                                                    } else {
+                                                        await deleteSpecificDoc(activeDocId, activeDocName);
+                                                    }
+                                                    setResetModal(false);
+                                                    notify(`✅ Đã reset tài liệu "${activeDocName}"!`);
+                                                }}
+                                                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg shadow text-xs"
+                                            >
+                                                🗑️ Xóa dữ liệu tài liệu này
+                                            </button>
                                         </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button 
-                                            onClick={runAiBatchComparison} 
-                                            disabled={compareModalState.isAnalyzing}
-                                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-lg text-xs shadow flex items-center gap-1"
-                                        >
-                                            <span>🤖</span>
-                                            <span>{compareModalState.isAnalyzing ? 'Đang phân tích AI...' : 'Chạy phân tích AI'}</span>
-                                        </button>
-                                        <button onClick={() => setCompareModalState(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
-                                    </div>
-                                </div>
 
-                                <div className="p-3 bg-slate-100 dark:bg-slate-800 border-b flex items-center justify-between gap-3 shrink-0 text-xs">
-                                    <input 
-                                        type="text" 
-                                        placeholder="🔍 Lọc theo số Điều hoặc tiêu đề..." 
-                                        value={compareFilter} 
-                                        onChange={e => setCompareFilter(e.target.value)} 
-                                        className="w-72 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-900" 
-                                    />
-                                    <span className="text-slate-500">Tổng số dòng: <strong>{compareModalState.rows.length}</strong> | Đã phân tích: <strong>{compareModalState.rows.filter(r => r.isAnalyzed).length}</strong></span>
-                                </div>
-
-                                <div className="flex-1 overflow-auto p-4 custom-scrollbar">
-                                    <table className="w-full text-left text-xs border-collapse">
-                                        <thead>
-                                            <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-b">
-                                                <th className="p-2.5 w-1/3">Tài liệu A ({compareModalState.sourceDocName})</th>
-                                                <th className="p-2.5 w-1/3">Tài liệu B ({compareModalState.targetDocName})</th>
-                                                <th className="p-2.5 w-1/3">Kết quả phân tích khác biệt (AI)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                                            {compareModalState.rows
-                                                .filter(r => !compareFilter || r.codeA.toLowerCase().includes(compareFilter.toLowerCase()) || r.titleA.toLowerCase().includes(compareFilter.toLowerCase()))
-                                                .map((row, rIdx) => (
-                                                    <tr key={rIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                                        <td className="p-2.5 align-top">
-                                                            <div className="font-bold text-aviation-600">{row.codeA}</div>
-                                                            <div className="font-semibold text-slate-800 dark:text-slate-100 mt-0.5">{row.titleA}</div>
-                                                            <div className="text-slate-500 line-clamp-3 mt-1">{row.textA}</div>
-                                                        </td>
-                                                        <td className="p-2.5 align-top">
-                                                            <button 
-                                                                onClick={() => openDocBSelector(rIdx, row)} 
-                                                                className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-bold rounded mb-1.5 hover:bg-indigo-100"
-                                                            >
-                                                                {row.selectedCodesB.length > 0 ? `Đã chọn: ${row.selectedCodesB.join(', ')}` : '➕ Chọn Mục đối chiếu ở B'}
-                                                            </button>
-                                                        </td>
-                                                        <td className="p-2.5 align-top">
-                                                            {row.isAnalyzing ? (
-                                                                <div className="text-amber-500 font-bold flex items-center gap-1"><span>⏳</span> AI đang phân tích...</div>
-                                                            ) : row.aiAnalysis ? (
-                                                                <div className="space-y-1">
-                                                                    <div className="text-slate-800 dark:text-slate-200 font-medium">{row.aiAnalysis}</div>
-                                                                    <button 
-                                                                        onClick={() => setCompareDetailModal({ isOpen: true, row })} 
-                                                                        className="text-aviation-600 font-bold hover:underline block"
-                                                                    >
-                                                                        Xem chi tiết &rarr;
-                                                                    </button>
-                                                                </div>
+                                        {savedRegistry.length > 0 && (
+                                            <div className="space-y-1.5">
+                                                <div className="font-bold text-slate-700 dark:text-slate-300">Xóa riêng từng tài liệu trong máy:</div>
+                                                <div className="max-h-36 overflow-y-auto space-y-1 custom-scrollbar">
+                                                    {savedRegistry.map(reg => (
+                                                        <div key={reg.id} className="p-2 rounded border bg-slate-50 dark:bg-slate-750 flex items-center justify-between">
+                                                            <span className="truncate max-w-[260px] font-medium">{reg.name}</span>
+                                                            {reg.id !== 'main' ? (
+                                                                <button onClick={() => deleteSpecificDoc(reg.id, reg.name)} className="text-rose-600 font-bold hover:underline">Xóa</button>
                                                             ) : (
-                                                                <button 
-                                                                    onClick={() => runSingleRowAiComparison(row)} 
-                                                                    className="px-2.5 py-1 bg-slate-100 dark:bg-slate-750 hover:bg-emerald-50 rounded border text-slate-700 dark:text-slate-300 font-bold"
-                                                                >
-                                                                    Phân tích dòng này
-                                                                </button>
+                                                                <span className="text-slate-400 text-[10px]">Tài liệu chính</span>
                                                             )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* MODAL CHỌN MỤC ĐỐI CHIẾU CỦA TÀI LIỆU B */}
-                    {docBArticleSelector.isOpen && (
-                        <div className="fixed inset-0 z-[96] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden flex flex-col max-h-[80vh]">
-                                <div className="bg-indigo-700 text-white p-3.5 flex justify-between items-center shrink-0">
-                                    <h3 className="font-bold text-xs sm:text-sm">Chọn Điều/Mục của B để đối chiếu với: {docBArticleSelector.rowCodeA}</h3>
-                                    <button onClick={() => setDocBArticleSelector(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white font-bold">&times;</button>
-                                </div>
-                                <div className="p-3 bg-slate-100 dark:bg-slate-750 border-b shrink-0">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Tìm theo số hiệu hoặc tên điều..." 
-                                        value={docBArticleSelector.searchQuery} 
-                                        onChange={e => setDocBArticleSelector(prev => ({ ...prev, searchQuery: e.target.value }))} 
-                                        className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-900" 
-                                    />
-                                </div>
-                                <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar text-xs">
-                                    {Object.values(compareModalState.targetDocArticles || {})
-                                        .filter(art => !docBArticleSelector.searchQuery || String(art.id).includes(docBArticleSelector.searchQuery) || (art.title || '').toLowerCase().includes(docBArticleSelector.searchQuery.toLowerCase()))
-                                        .map(art => {
-                                            const code = art.code || String(art.id);
-                                            const isSelected = docBArticleSelector.selectedCodes.includes(code);
-                                            return (
-                                                <div 
-                                                    key={art.id} 
-                                                    onClick={() => {
-                                                        const cur = docBArticleSelector.selectedCodes;
-                                                        const next = isSelected ? cur.filter(c => c !== code) : [...cur, code];
-                                                        setDocBArticleSelector(prev => ({ ...prev, selectedCodes: next }));
-                                                    }}
-                                                    className={`p-2 rounded-lg border cursor-pointer flex items-center justify-between ${isSelected ? 'bg-indigo-50 dark:bg-indigo-950 border-indigo-400 font-bold' : 'bg-slate-50 dark:bg-slate-900'}`}
-                                                >
-                                                    <span className="truncate pr-2">{code} - {art.title}</span>
-                                                    <span>{isSelected ? '✅' : '⚪'}</span>
-                                                </div>
-                                            );
-                                        })}
-                                </div>
-                                <div className="p-3 bg-slate-100 dark:bg-slate-750 border-t flex justify-end gap-2 shrink-0">
-                                    <button onClick={() => setDocBArticleSelector(prev => ({ ...prev, isOpen: false }))} className="px-3 py-1 bg-slate-200 dark:bg-slate-600 rounded text-xs font-bold">Hủy</button>
-                                    <button onClick={saveDocBSelection} className="px-4 py-1 bg-indigo-600 text-white rounded text-xs font-bold shadow">Xác nhận</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* MODAL CHI TIẾT KẾT QUẢ SO SÁNH */}
-                    {compareDetailModal.isOpen && compareDetailModal.row && (
-                        <div className="fixed inset-0 z-[97] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden flex flex-col max-h-[85vh]">
-                                <div className="bg-indigo-800 text-white p-4 flex justify-between items-center shrink-0">
-                                    <h3 className="font-bold text-sm">Chi tiết đối chiếu: {compareDetailModal.row.codeA}</h3>
-                                    <button onClick={() => setCompareDetailModal({ isOpen: false, row: null })} className="text-white/70 hover:text-white font-bold">&times;</button>
-                                </div>
-                                <div className="p-5 space-y-3.5 text-xs overflow-y-auto custom-scrollbar">
-                                    <div>
-                                        <h4 className="font-bold text-aviation-600 uppercase text-[11px]">Tóm tắt khác biệt:</h4>
-                                        <p className="mt-1 text-slate-800 dark:text-slate-100 leading-relaxed font-semibold">{compareDetailModal.row.aiAnalysis}</p>
-                                    </div>
-                                    {compareDetailModal.row.detailedPoints && compareDetailModal.row.detailedPoints.length > 0 && (
-                                        <div>
-                                            <h4 className="font-bold text-aviation-600 uppercase text-[11px] mb-1.5">Các điểm chi tiết:</h4>
-                                            <ul className="space-y-1.5 list-disc pl-4 text-slate-700 dark:text-slate-200">
-                                                {compareDetailModal.row.detailedPoints.map((pt, pIdx) => (
-                                                    <li key={pIdx} className="leading-relaxed">{pt}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="p-3 bg-slate-100 dark:bg-slate-750 border-t text-right shrink-0">
-                                    <button onClick={() => setCompareDetailModal({ isOpen: false, row: null })} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* BÓNG CHAT AI */}
-                    <div className="fixed bottom-6 right-6 z-40 no-print">
-                        <button 
-                            onClick={() => setAiOpen(prev => !prev)}
-                            className="group relative flex items-center justify-center w-14 h-14 bg-gradient-to-r from-aviation-600 to-indigo-600 hover:from-aviation-500 hover:to-indigo-500 text-white rounded-full shadow-2xl transition duration-200 hover:scale-105 active:scale-95 focus:outline-none border-2 border-white/20"
-                            title="Mở Trợ lý AI Hàng không"
-                        >
-                            <span className="text-2xl animate-pulse-slow">🤖</span>
-                            <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white"></span>
-                            </span>
-                        </button>
-                    </div>
-
-                    {/* KHUNG CỬA SỔ CHAT TRỢ LÝ AI */}
-                    {aiOpen && (
-                        <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[94vw] sm:w-[420px] md:w-[460px] h-[580px] max-h-[82vh] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200 no-print">
-                            <div className="bg-gradient-to-r from-aviation-800 to-indigo-800 text-white p-3.5 flex items-center justify-between shadow-sm shrink-0">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-base">🤖</div>
-                                    <div>
-                                        <h3 className="font-bold text-xs sm:text-sm leading-tight flex items-center gap-1.5">
-                                            <span>Trợ lý Pháp chế An toàn Hàng không</span>
-                                        </h3>
-                                        <div className="text-[10px] text-aviation-200 flex items-center gap-1 mt-0.5">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                            <span className="truncate max-w-[170px]">{selectedModel}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <button 
-                                        onClick={() => { setTempApiKey(aiApiKey); setShowKeySetting(true); }} 
-                                        className="p-1.5 hover:bg-white/10 rounded-lg text-xs" 
-                                        title="Cấu hình API Key & Model"
-                                    >
-                                        ⚙️
-                                    </button>
-                                    <button 
-                                        onClick={() => setAiOpen(false)} 
-                                        className="p-1.5 hover:bg-white/10 rounded-lg text-sm font-bold w-7 h-7 flex items-center justify-center"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-3.5 space-y-3 custom-scrollbar text-xs bg-slate-50 dark:bg-slate-950/60">
-                                {aiMessages.map((msg, idx) => {
-                                    const references = msg.role === 'model' && !msg.isError
-                                        ? extractReferencesFromAiText(msg.text, docs, activeDocId, activeDocName, AviationDB.getArticlesMap(), AviationDB.getAppendicesMap())
-                                        : [];
-
-                                    return (
-                                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[90%] rounded-2xl p-3 shadow-xs space-y-1.5 ${msg.role === 'user' ? 'bg-aviation-600 text-white rounded-tr-none' : msg.isError ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-200 rounded-tl-none' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-tl-none'}`}>
-                                                {msg.attachment && (
-                                                    <div className="text-[10px] opacity-80 pb-1 border-b border-white/20 flex items-center gap-1">
-                                                        <span>📎</span>
-                                                        <span className="truncate font-semibold">{msg.attachment.name}</span>
-                                                    </div>
-                                                )}
-                                                <div className="whitespace-pre-line leading-relaxed text-[12px] break-words">{msg.text}</div>
-                                                
-                                                {references.length > 0 && (
-                                                    <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1.5">
-                                                        <div className="text-[10px] font-bold uppercase tracking-wider text-aviation-600 dark:text-aviation-400 flex items-center gap-1">
-                                                            <span>📌</span>
-                                                            <span>Điều khoản & Phụ lục được trích dẫn:</span>
                                                         </div>
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {references.map((ref, rIdx) => (
-                                                                <button
-                                                                    type="button"
-                                                                    key={rIdx}
-                                                                    onClick={(e) => {
-                                                                        e.preventDefault();
-                                                                        e.stopPropagation();
-                                                                        handleDirectJumpFromAi(ref);
-                                                                    }}
-                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-aviation-50 hover:bg-aviation-100 dark:bg-aviation-950/80 dark:hover:bg-aviation-900 border border-aviation-300 dark:border-aviation-600 text-[11px] font-bold text-aviation-800 dark:text-aviation-200 transition hover:scale-105 shadow-xs cursor-pointer select-none"
-                                                                    title={`Bấm để mở [${ref.code}] trong tài liệu "${ref.docName}"`}
-                                                                >
-                                                                    <span>🔗</span>
-                                                                    <span className="text-aviation-600 dark:text-aviation-400 font-extrabold max-w-[120px] truncate">[{ref.docName}]</span>
-                                                                    <span>{ref.code}</span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                <div className={`text-[9px] text-right mt-1 ${msg.role === 'user' ? 'text-aviation-100' : 'text-slate-400'}`}>
-                                                    {msg.time}
+                                                    ))}
                                                 </div>
                                             </div>
+                                        )}
+
+                                        <button 
+                                            onClick={clearAllDatabase} 
+                                            className="w-full p-3 bg-red-100/70 dark:bg-red-950/60 border border-red-300 dark:border-red-800 rounded-xl text-left hover:bg-red-200 transition"
+                                        >
+                                            <div className="font-bold text-red-800 dark:text-red-200">⚠️ Xóa Sạch Toàn Bộ CSDL (Factory Reset)</div>
+                                            <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Xóa trắng tất cả tài liệu đã nạp để làm mới hoàn toàn</div>
+                                        </button>
+                                    </div>
+                                    <div className="bg-slate-100 dark:bg-slate-750 px-4 py-3 text-right">
+                                        <button onClick={() => setResetModal(false)} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL CỬA SỔ SO SÁNH ĐỐI CHIẾU 2 TÀI LIỆU */}
+                        {compareModalState.isOpen && (
+                            <div className="fixed inset-0 z-[86] bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in zoom-in">
+                                <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-6xl h-[90vh] shadow-2xl border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden">
+                                    <div className="bg-gradient-to-r from-indigo-800 to-aviation-800 text-white p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                                        <div>
+                                            <h3 className="font-bold text-sm sm:text-base flex items-center gap-2">
+                                                <span>⚖️</span>
+                                                <span>Bảng So Sánh & Đối Chiếu Sự Khác Biệt Giữa 2 Tài Liệu</span>
+                                            </h3>
+                                            <div className="text-[11px] text-indigo-200 mt-0.5">
+                                                Tài liệu gốc (A): <strong>{compareModalState.sourceDocName}</strong> ➔ Đối chiếu (B): <strong>{compareModalState.targetDocName}</strong>
+                                            </div>
                                         </div>
-                                    );
-                                })}
-                                {aiLoading && (
-                                    <div className="flex justify-start">
-                                        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-3 shadow-xs flex items-center gap-2 text-slate-500">
-                                            <span className="animate-spin text-sm">⏳</span>
-                                            <span className="text-xs font-semibold">Trợ lý AI đang đối soát PDF và tra cứu...</span>
+                                        <div className="flex items-center gap-2">
+                                            <button 
+                                                onClick={runAiBatchComparison} 
+                                                disabled={compareModalState.isAnalyzing}
+                                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-lg text-xs shadow flex items-center gap-1"
+                                            >
+                                                <span>🤖</span>
+                                                <span>{compareModalState.isAnalyzing ? 'Đang phân tích AI...' : 'Chạy phân tích AI'}</span>
+                                            </button>
+                                            <button onClick={() => setCompareModalState(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white text-xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10">&times;</button>
                                         </div>
+                                    </div>
+
+                                    <div className="p-3 bg-slate-100 dark:bg-slate-800 border-b flex items-center justify-between gap-3 shrink-0 text-xs">
+                                        <input 
+                                            type="text" 
+                                            placeholder="🔍 Lọc theo số Điều hoặc tiêu đề..." 
+                                            value={compareFilter} 
+                                            onChange={e => setCompareFilter(e.target.value)} 
+                                            className="w-72 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-900" 
+                                        />
+                                        <span className="text-slate-500">Tổng số dòng: <strong>{compareModalState.rows.length}</strong> | Đã phân tích: <strong>{compareModalState.rows.filter(r => r.isAnalyzed).length}</strong></span>
+                                    </div>
+
+                                    <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+                                        <table className="w-full text-left text-xs border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-b">
+                                                    <th className="p-2.5 w-1/3">Tài liệu A ({compareModalState.sourceDocName})</th>
+                                                    <th className="p-2.5 w-1/3">Tài liệu B ({compareModalState.targetDocName})</th>
+                                                    <th className="p-2.5 w-1/3">Kết quả phân tích khác biệt (AI)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                                                {compareModalState.rows
+                                                    .filter(r => !compareFilter || r.codeA.toLowerCase().includes(compareFilter.toLowerCase()) || r.titleA.toLowerCase().includes(compareFilter.toLowerCase()))
+                                                    .map((row, rIdx) => (
+                                                        <tr key={rIdx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                                            <td className="p-2.5 align-top">
+                                                                <div className="font-bold text-aviation-600">{row.codeA}</div>
+                                                                <div className="font-semibold text-slate-800 dark:text-slate-100 mt-0.5">{row.titleA}</div>
+                                                                <div className="text-slate-500 line-clamp-3 mt-1">{row.textA}</div>
+                                                            </td>
+                                                            <td className="p-2.5 align-top">
+                                                                <button 
+                                                                    onClick={() => openDocBSelector(rIdx, row)} 
+                                                                    className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-bold rounded mb-1.5 hover:bg-indigo-100"
+                                                                >
+                                                                    {row.selectedCodesB.length > 0 ? `Đã chọn: ${row.selectedCodesB.join(', ')}` : '➕ Chọn Mục đối chiếu ở B'}
+                                                                </button>
+                                                            </td>
+                                                            <td className="p-2.5 align-top">
+                                                                {row.isAnalyzing ? (
+                                                                    <div className="text-amber-500 font-bold flex items-center gap-1"><span>⏳</span> AI đang phân tích...</div>
+                                                                ) : row.aiAnalysis ? (
+                                                                    <div className="space-y-1">
+                                                                        <div className="text-slate-800 dark:text-slate-200 font-medium">{row.aiAnalysis}</div>
+                                                                        <button 
+                                                                            onClick={() => setCompareDetailModal({ isOpen: true, row })} 
+                                                                            className="text-aviation-600 font-bold hover:underline block"
+                                                                        >
+                                                                            Xem chi tiết &rarr;
+                                                                        </button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button 
+                                                                        onClick={() => runSingleRowAiComparison(row)} 
+                                                                        className="px-2.5 py-1 bg-slate-100 dark:bg-slate-750 hover:bg-emerald-50 rounded border text-slate-700 dark:text-slate-300 font-bold"
+                                                                    >
+                                                                        Phân tích dòng này
+                                                                    </button>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL CHỌN MỤC ĐỐI CHIẾU CỦA TÀI LIỆU B */}
+                        {docBArticleSelector.isOpen && (
+                            <div className="fixed inset-0 z-[96] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden flex flex-col max-h-[80vh]">
+                                    <div className="bg-indigo-700 text-white p-3.5 flex justify-between items-center shrink-0">
+                                        <h3 className="font-bold text-xs sm:text-sm">Chọn Điều/Mục của B để đối chiếu với: {docBArticleSelector.rowCodeA}</h3>
+                                        <button onClick={() => setDocBArticleSelector(prev => ({ ...prev, isOpen: false }))} className="text-white/70 hover:text-white font-bold">&times;</button>
+                                    </div>
+                                    <div className="p-3 bg-slate-100 dark:bg-slate-750 border-b shrink-0">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Tìm theo số hiệu hoặc tên điều..." 
+                                            value={docBArticleSelector.searchQuery} 
+                                            onChange={e => setDocBArticleSelector(prev => ({ ...prev, searchQuery: e.target.value }))} 
+                                            className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-900" 
+                                        />
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar text-xs">
+                                        {Object.values(compareModalState.targetDocArticles || {})
+                                            .filter(art => !docBArticleSelector.searchQuery || String(art.id).includes(docBArticleSelector.searchQuery) || (art.title || '').toLowerCase().includes(docBArticleSelector.searchQuery.toLowerCase()))
+                                            .map(art => {
+                                                const code = art.code || String(art.id);
+                                                const isSelected = docBArticleSelector.selectedCodes.includes(code);
+                                                return (
+                                                    <div 
+                                                        key={art.id} 
+                                                        onClick={() => {
+                                                            const cur = docBArticleSelector.selectedCodes;
+                                                            const next = isSelected ? cur.filter(c => c !== code) : [...cur, code];
+                                                            setDocBArticleSelector(prev => ({ ...prev, selectedCodes: next }));
+                                                        }}
+                                                        className={`p-2 rounded-lg border cursor-pointer flex items-center justify-between ${isSelected ? 'bg-indigo-50 dark:bg-indigo-950 border-indigo-400 font-bold' : 'bg-slate-50 dark:bg-slate-900'}`}
+                                                    >
+                                                        <span className="truncate pr-2">{code} - {art.title}</span>
+                                                        <span>{isSelected ? '✅' : '⚪'}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                    <div className="p-3 bg-slate-100 dark:bg-slate-750 border-t flex justify-end gap-2 shrink-0">
+                                        <button onClick={() => setDocBArticleSelector(prev => ({ ...prev, isOpen: false }))} className="px-3 py-1 bg-slate-200 dark:bg-slate-600 rounded text-xs font-bold">Hủy</button>
+                                        <button onClick={saveDocBSelection} className="px-4 py-1 bg-indigo-600 text-white rounded text-xs font-bold shadow">Xác nhận</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* MODAL CHI TIẾT KẾT QUẢ SO SÁNH */}
+                        {compareDetailModal.isOpen && compareDetailModal.row && (
+                            <div className="fixed inset-0 z-[97] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+                                <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden flex flex-col max-h-[85vh]">
+                                    <div className="bg-indigo-800 text-white p-4 flex justify-between items-center shrink-0">
+                                        <h3 className="font-bold text-sm">Chi tiết đối chiếu: {compareDetailModal.row.codeA}</h3>
+                                        <button onClick={() => setCompareDetailModal({ isOpen: false, row: null })} className="text-white/70 hover:text-white font-bold">&times;</button>
+                                    </div>
+                                    <div className="p-5 space-y-3.5 text-xs overflow-y-auto custom-scrollbar">
+                                        <div>
+                                            <h4 className="font-bold text-aviation-600 uppercase text-[11px]">Tóm tắt khác biệt:</h4>
+                                            <p className="mt-1 text-slate-800 dark:text-slate-100 leading-relaxed font-semibold">{compareDetailModal.row.aiAnalysis}</p>
+                                        </div>
+                                        {compareDetailModal.row.detailedPoints && compareDetailModal.row.detailedPoints.length > 0 && (
+                                            <div>
+                                                <h4 className="font-bold text-aviation-600 uppercase text-[11px] mb-1.5">Các điểm chi tiết:</h4>
+                                                <ul className="space-y-1.5 list-disc pl-4 text-slate-700 dark:text-slate-200">
+                                                    {compareDetailModal.row.detailedPoints.map((pt, pIdx) => (
+                                                        <li key={pIdx} className="leading-relaxed">{pt}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="p-3 bg-slate-100 dark:bg-slate-750 border-t text-right shrink-0">
+                                        <button onClick={() => setCompareDetailModal({ isOpen: false, row: null })} className="px-4 py-1.5 bg-slate-200 dark:bg-slate-600 rounded-lg font-bold text-xs">Đóng</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* BÓNG CHAT AI */}
+                        <div className="fixed bottom-6 right-6 z-40 no-print">
+                            <button 
+                                onClick={() => setAiOpen(prev => !prev)}
+                                className="group relative flex items-center justify-center w-14 h-14 bg-gradient-to-r from-aviation-600 to-indigo-600 hover:from-aviation-500 hover:to-indigo-500 text-white rounded-full shadow-2xl transition duration-200 hover:scale-105 active:scale-95 focus:outline-none border-2 border-white/20"
+                                title="Mở Trợ lý AI Hàng không"
+                            >
+                                <span className="text-2xl animate-pulse-slow">🤖</span>
+                                <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white"></span>
+                                </span>
+                            </button>
+                        </div>
+
+                        {/* KHUNG CỬA SỔ CHAT TRỢ LÝ AI */}
+                        {aiOpen && (
+                            <div className="fixed bottom-24 right-4 sm:right-6 z-50 w-[94vw] sm:w-[420px] md:w-[460px] h-[580px] max-h-[82vh] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-300 dark:border-slate-700 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-200 no-print">
+                                <div className="bg-gradient-to-r from-aviation-800 to-indigo-800 text-white p-3.5 flex items-center justify-between shadow-sm shrink-0">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-base">🤖</div>
+                                        <div>
+                                            <h3 className="font-bold text-xs sm:text-sm leading-tight flex items-center gap-1.5">
+                                                <span>Trợ lý Pháp chế An toàn Hàng không</span>
+                                            </h3>
+                                            <div className="text-[10px] text-aviation-200 flex items-center gap-1 mt-0.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                                <span className="truncate max-w-[170px]">{selectedModel}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button 
+                                            onClick={() => { setTempApiKey(aiApiKey); setShowKeySetting(true); }} 
+                                            className="p-1.5 hover:bg-white/10 rounded-lg text-xs" 
+                                            title="Cấu hình API Key & Model"
+                                        >
+                                            ⚙️
+                                        </button>
+                                        <button 
+                                            onClick={() => setAiOpen(false)} 
+                                            className="p-1.5 hover:bg-white/10 rounded-lg text-sm font-bold w-7 h-7 flex items-center justify-center"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto p-3.5 space-y-3 custom-scrollbar text-xs bg-slate-50 dark:bg-slate-950/60">
+                                    {aiMessages.map((msg, idx) => {
+                                        const references = msg.role === 'model' && !msg.isError
+                                            ? extractReferencesFromAiText(msg.text, docs, activeDocId, activeDocName, AviationDB.getArticlesMap(), AviationDB.getAppendicesMap())
+                                            : [];
+
+                                        return (
+                                            <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[90%] rounded-2xl p-3 shadow-xs space-y-1.5 ${msg.role === 'user' ? 'bg-aviation-600 text-white rounded-tr-none' : msg.isError ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 border border-rose-200 rounded-tl-none' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-tl-none'}`}>
+                                                    {msg.attachment && (
+                                                        <div className="text-[10px] opacity-80 pb-1 border-b border-white/20 flex items-center gap-1">
+                                                            <span>📎</span>
+                                                            <span className="truncate font-semibold">{msg.attachment.name}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className="whitespace-pre-line leading-relaxed text-[12px] break-words">{msg.text}</div>
+                                                    
+                                                    {references.length > 0 && (
+                                                        <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1.5">
+                                                            <div className="text-[10px] font-bold uppercase tracking-wider text-aviation-600 dark:text-aviation-400 flex items-center gap-1">
+                                                                <span>📌</span>
+                                                                <span>Điều khoản & Phụ lục được trích dẫn:</span>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {references.map((ref, rIdx) => (
+                                                                    <button
+                                                                        type="button"
+                                                                        key={rIdx}
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            e.stopPropagation();
+                                                                            handleDirectJumpFromAi(ref);
+                                                                        }}
+                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-aviation-50 hover:bg-aviation-100 dark:bg-aviation-950/80 dark:hover:bg-aviation-900 border border-aviation-300 dark:border-aviation-600 text-[11px] font-bold text-aviation-800 dark:text-aviation-200 transition hover:scale-105 shadow-xs cursor-pointer select-none"
+                                                                        title={`Bấm để mở [${ref.code}] trong tài liệu "${ref.docName}"`}
+                                                                    >
+                                                                        <span>🔗</span>
+                                                                        <span className="text-aviation-600 dark:text-aviation-400 font-extrabold max-w-[120px] truncate">[{ref.docName}]</span>
+                                                                        <span>{ref.code}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`text-[9px] text-right mt-1 ${msg.role === 'user' ? 'text-aviation-100' : 'text-slate-400'}`}>
+                                                        {msg.time}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {aiLoading && (
+                                        <div className="flex justify-start">
+                                            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl rounded-tl-none p-3 shadow-xs flex items-center gap-2 text-slate-500">
+                                                <span className="animate-spin text-sm">⏳</span>
+                                                <span className="text-xs font-semibold">Trợ lý AI đang đối soát PDF và tra cứu...</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div ref={chatEndRef} />
+                                </div>
+
+                                {aiAttachment && (
+                                    <div className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/50 border-t border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
+                                        <div className="flex items-center gap-1.5 truncate">
+                                            <span>📎</span>
+                                            <span className="truncate font-semibold text-[11px]">{aiAttachment.name}</span>
+                                        </div>
+                                        <button onClick={() => setAiAttachment(null)} className="text-slate-400 hover:text-rose-500 font-bold ml-2">✕</button>
                                     </div>
                                 )}
-                                <div ref={chatEndRef} />
-                            </div>
 
-                            {aiAttachment && (
-                                <div className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/50 border-t border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between text-xs text-indigo-700 dark:text-indigo-300">
-                                   <div className="flex items-center gap-1.5 truncate">
-                                        <span>📎</span>
-                                        <span className="truncate font-semibold text-[11px]">{aiAttachment.name}</span>
-                                    </div>
-                                    <button onClick={() => setAiAttachment(null)} className="text-slate-400 hover:text-rose-500 font-bold ml-2">✕</button>
+                                <div className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
+                                    <form onSubmit={(e) => { e.preventDefault(); handleSendAiMessage(); }} className="flex items-center gap-1.5">
+                                        <label className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 rounded-xl cursor-pointer transition" title="Đính kèm file hoặc ảnh">
+                                            <span>📎</span>
+                                            <input ref={aiFileInputRef} type="file" className="hidden" onChange={handleAiAttachmentUpload} />
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Hỏi về Điều khoản, Phụ lục hoặc quy định..." 
+                                            value={aiInput} 
+                                            onChange={e => setAiInput(e.target.value)} 
+                                            className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-aviation-500" 
+                                        />
+                                        <button 
+                                            type="submit" 
+                                            disabled={aiLoading || (!aiInput.trim() && !aiAttachment)} 
+                                            className="px-3.5 py-2 bg-aviation-600 hover:bg-aviation-500 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1 transition"
+                                        >
+                                            <span>Gửi</span>
+                                            <span>&rarr;</span>
+                                        </button>
+                                    </form>
                                 </div>
-                            )}
-
-                            <div className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
-                                <form onSubmit={(e) => { e.preventDefault(); handleSendAiMessage(); }} className="flex items-center gap-1.5">
-                                    <label className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 rounded-xl cursor-pointer transition" title="Đính kèm file hoặc ảnh">
-                                        <span>📎</span>
-                                        <input ref={aiFileInputRef} type="file" className="hidden" onChange={handleAiAttachmentUpload} />
-                                    </label>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Hỏi về Điều khoản, Phụ lục hoặc quy định..." 
-                                        value={aiInput} 
-                                        onChange={e => setAiInput(e.target.value)} 
-                                        className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-aviation-500" 
-                                    />
-                                    <button 
-                                        type="submit" 
-                                        disabled={aiLoading || (!aiInput.trim() && !aiAttachment)} 
-                                        className="px-3.5 py-2 bg-aviation-600 hover:bg-aviation-500 disabled:opacity-40 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1 transition"
-                                    >
-                                        <span>Gửi</span>
-                                        <span>&rarr;</span>
-                                    </button>
-                                </form>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    <footer className="bg-white dark:bg-slate-800 border-t py-3 text-center text-xs text-slate-400 no-print">
-                        Hệ thống tra cứu Quy chế & Tài liệu Hàng không • Tích hợp Đối soát PDF Phụ lục, Dịch thuật ICAO & Trợ lý AI
-                    </footer>
-                </div>
-            </ErrorBoundary>
-        );
-    }
+                        <footer className="bg-white dark:bg-slate-800 border-t py-3 text-center text-xs text-slate-400 no-print">
+                            Hệ thống tra cứu Quy chế & Tài liệu Hàng không • Tích hợp Đối soát PDF Phụ lục, Dịch thuật ICAO & Trợ lý AI
+                        </footer>
+                    </div>
+                </ErrorBoundary>
+            );
+        }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    
     </script>
 </body>
 </html>

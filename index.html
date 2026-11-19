@@ -5059,70 +5059,37 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             </div>
                         )}
 
-                        {/* ROW 1: TABS TÀI LIỆU */}
-                        <div className="bg-slate-900 px-3 pt-2 flex gap-1 overflow-x-auto custom-scrollbar border-b border-slate-700 no-print touch-pan-x">
-                            <div
-                                onClick={() => { setJumpHistory(null); setTab('home'); }}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg text-xs sm:text-sm cursor-pointer transition whitespace-nowrap shrink-0 font-bold ${tab === 'home' ? 'bg-slate-50 text-aviation-800 dark:bg-slate-800 dark:text-white shadow-[0_-2px_10px_rgba(0,0,0,0.2)]' : 'bg-slate-800 text-amber-300 hover:bg-slate-700 hover:text-amber-200'}`}
-                            >
-                                <span>🏠</span>
-                                <span>Trang chủ</span>
-                            </div>
-                            {docs.map(d => (
-                                <div
-                                    key={d.id}
-                                    onClick={async () => {
-                                        const wasHome = tab === 'home';
-                                        await switchDoc(d.id);
-                                        if (wasHome) {
-                                            setJumpHistory(null);
-                                            const savedTab = docNavStates[d.id]?.tab;
-                                            setTab(savedTab && savedTab !== 'home' ? savedTab : 'all');
-                                        }
-                                    }}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-t-lg text-xs sm:text-sm cursor-pointer transition whitespace-nowrap shrink-0 group ${tab !== 'home' && activeDocId === d.id ? 'bg-slate-50 text-aviation-800 font-bold dark:bg-slate-800 dark:text-white shadow-[0_-2px_10px_rgba(0,0,0,0.2)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}
-                                >
-                                    <span>{d.type === 'pdf' ? '📄' : '📝'}</span>
-                                    <span className="max-w-[180px] truncate font-semibold">{d.name}</span>
-                                    {!isReaderClientMode && (
-                                        <div className="flex items-center gap-1 ml-1.5 opacity-80 group-hover:opacity-100">
-                                            <button onClick={(e) => { e.stopPropagation(); handleRenameDocument(d.id, d.name); }} className="hover:text-yellow-400 p-0.5" title="Đổi tên">✏️</button>
-                                            
-                                            <button onClick={(e) => { e.stopPropagation(); setReloadTabModal({ isOpen: true, doc: d }); }} className="hover:text-emerald-400 hover:bg-emerald-900/50 rounded p-0.5 transition" title="Nạp lại / Thay thế file cho Tab này"> 🔄 </button>
-
-                                            {d.id !== 'main' && (
-                                                <span onClick={(e) => { e.stopPropagation(); closeDoc(d.id); }} className="hover:text-red-500 rounded-full w-4 h-4 flex items-center justify-center font-bold text-base leading-none" title="Đóng tab">&times;</span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                            {!isReaderClientMode && (
-                                <button onClick={openUploadMenu} className="flex items-center gap-1 px-4 py-2 rounded-t-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold cursor-pointer shadow-lg ml-2 whitespace-nowrap shrink-0">
-                                    <span>➕ Nạp tài liệu (Word/PDF)</span>
-                                </button>
-                            )}
-                        </div>
-
-                        {/* ROW 2: HEADER CHÍNH */}
+                        {/* HEADER CHÍNH */}
                         <header className="bg-aviation-800 text-white sticky top-0 z-40 shadow-md no-print">
-                            <div className="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3">
-                                <div>
-                                    <h1 className="text-sm sm:text-base font-extrabold tracking-tight">
-                                        HỆ THỐNG TRA CỨU QUY CHẾ & MANUALS HÀNG KHÔNG
-                                    </h1>
-                                    {tab === 'home' ? (
-                                        <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
-                                            <span>🏠 Trang chủ:</span>
-                                            <span className="font-semibold text-yellow-300">Tìm kiếm & Tra cứu toàn bộ {docs.length} tài liệu</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
-                                            <span>Tài liệu đang xem:</span>
-                                            <span>•</span>
-                                            <span className="font-semibold text-yellow-300">{activeDocName} {activeDocType === 'docx' ? `(${dataCount} Mục/Điều)` : '(Bản PDF)'}</span>
-                                        </div>
+                            <div className="max-w-7xl mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    {tab !== 'home' && (
+                                        <button
+                                            onClick={() => { setJumpHistory(null); setTab('home'); }}
+                                            className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-extrabold shadow flex items-center gap-1.5 transition hover:scale-105 shrink-0"
+                                            title="Quay lại Trang chủ"
+                                        >
+                                            <span>←</span>
+                                            <span>🏠 Trang chủ</span>
+                                        </button>
                                     )}
+                                    <div>
+                                        <h1 className="text-sm sm:text-base font-extrabold tracking-tight">
+                                            HỆ THỐNG TRA CỨU QUY CHẾ & MANUALS HÀNG KHÔNG
+                                        </h1>
+                                        {tab === 'home' ? (
+                                            <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
+                                                <span>🏠 Trang chủ:</span>
+                                                <span className="font-semibold text-yellow-300">Tìm kiếm & Tra cứu toàn bộ {docs.length} tài liệu</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
+                                                <span>Tài liệu đang xem:</span>
+                                                <span>•</span>
+                                                <span className="font-semibold text-yellow-300">{activeDocName} {activeDocType === 'docx' ? `(${dataCount} Mục/Điều)` : '(Bản PDF)'}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -5310,7 +5277,12 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                             {!homeSearchQuery.trim() ? (
                                                 <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
                                                     <div className="flex items-center justify-between flex-wrap gap-2">
-                                                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">📚 Danh sách tài liệu hiện có (Bấm để mở nhanh hoặc chọn ở trên để lọc tìm kiếm)</h3>
+                                                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">📚 Danh sách tài liệu hiện có (Bấm vào tài liệu để mở)</h3>
+                                                        {!isReaderClientMode && (
+                                                            <button onClick={openUploadMenu} className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow flex items-center gap-1 transition">
+                                                                <span>➕ Nạp tài liệu (Word/PDF)</span>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                                         {docs.map(d => {
@@ -5320,13 +5292,29 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                                     key={d.id}
                                                                     onClick={async () => {
                                                                         await switchDoc(d.id);
-                                                                        setTab('all');
+                                                                        setJumpHistory(null);
+                                                                        const savedTab = docNavStates[d.id]?.tab;
+                                                                        setTab(savedTab && savedTab !== 'home' ? savedTab : 'all');
                                                                     }}
                                                                     className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-aviation-50 dark:bg-slate-900/50 dark:hover:bg-aviation-950/40 cursor-pointer transition flex flex-col justify-between gap-2 group"
                                                                 >
                                                                     <div>
-                                                                        <div className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-aviation-600 break-words">{d.name}</div>
-                                                                        <div className="text-[11px] text-slate-500 mt-1">{st.artCount} điều khoản &bull; {st.appCount} phụ lục/mẫu</div>
+                                                                        <div className="flex items-start justify-between gap-2">
+                                                                            <div className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-aviation-600 break-words flex items-center gap-1.5">
+                                                                                <span>{d.type === 'pdf' ? '📄' : '📝'}</span>
+                                                                                <span>{d.name}</span>
+                                                                            </div>
+                                                                            {!isReaderClientMode && (
+                                                                                <div className="flex items-center gap-1 shrink-0 opacity-70 group-hover:opacity-100">
+                                                                                    <button onClick={(e) => { e.stopPropagation(); handleRenameDocument(d.id, d.name); }} className="hover:text-yellow-500 p-0.5 text-xs" title="Đổi tên">✏️</button>
+                                                                                    <button onClick={(e) => { e.stopPropagation(); setReloadTabModal({ isOpen: true, doc: d }); }} className="hover:text-emerald-500 p-0.5 text-xs" title="Nạp lại / Thay thế file">🔄</button>
+                                                                                    {d.id !== 'main' && (
+                                                                                        <button onClick={(e) => { e.stopPropagation(); closeDoc(d.id); }} className="hover:text-red-500 p-0.5 text-xs font-bold" title="Xóa tài liệu">&times;</button>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="text-[11px] text-slate-500 mt-1">{d.type === 'pdf' ? 'Tài liệu PDF' : `${st.artCount} điều khoản • ${st.appCount} phụ lục/mẫu`}</div>
                                                                     </div>
                                                                     <div className="flex justify-between items-center pt-2 border-t border-slate-200/70 dark:border-slate-700">
                                                                         <span className="text-[11px] font-semibold text-aviation-600">Mở tài liệu &rarr;</span>

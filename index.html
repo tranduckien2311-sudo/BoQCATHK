@@ -274,10 +274,14 @@
             if (norm.includes('221')) {
                 const isMau = rawTitle.toLowerCase().includes('mẫu') || rawCode.toLowerCase().includes('mẫu');
                 if (isMau && num !== null) {
-                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${padded}.pdf`;
-                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${padded}.pdf`;
-                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Mau_${padded}.docx`;
-                    wordName = `Mau_${padded}.docx`;
+                    const suffixMatch = rawCode.match(/\d+([A-Za-z]+)/) || rawTitle.match(/(?:mẫu\s*số|mẫu)\s*\d+([A-Za-z]+)/i);
+                    const suffix = suffixMatch ? suffixMatch[1].toUpperCase() : '';
+                    const pdfCode = `${padded}${suffix}`;
+                    const wordCode = `${num}${suffix}`;
+                    pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_VIII_Mau%20${pdfCode}.pdf`;
+                    pdfName = `ND_221_2026_NĐ-CP-Phu Luc_VIII_Mau ${pdfCode}.pdf`;
+                    wordUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Word/Mau_${wordCode}.docx`;
+                    wordName = `Mau_${wordCode}.docx`;
                 } else if (roman) {
                     pdfUrl = `https://raw.githubusercontent.com/tranduckien2311-sudo/BoQCATHK/main/PhuLuc/PhuLucND221/Pdf/ND_221_2026_N%C4%90-CP-Phu%20Luc_${roman}.pdf`;
                     pdfName = `ND_221_2026_NĐ-CP-Phu Luc_${roman}.pdf`;

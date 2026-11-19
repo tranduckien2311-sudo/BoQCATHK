@@ -320,10 +320,76 @@
             return targetApp;
         };
 
+        const isValidAppendixCode = (code) => {
+            if (!code || typeof code !== 'string') return false;
+            const c = code.trim();
+            if (!c) return false;
+            // Phải chứa ít nhất 1 chữ số (VD: 1, 01, 06A, 8130-3)
+            if (/\d/.test(c)) return true;
+            // Hoặc là số La Mã viết HOA hợp lệ (VD: I, IV, VIII, LXIII)
+            if (/^(?=[IVXLCDM]+$)M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})$/.test(c)) return true;
+            // Hoặc 1 chữ cái viết HOA đơn lẻ (VD: Phụ lục A)
+            if (/^[A-Z]$/.test(c)) return true;
+            return false;
+        };
+
+        const isLikelyDateCode = (code) => {
+            const m = String(code || '').trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+            if (!m) return false;
+            const d = parseInt(m[1], 10);
+            const mo = parseInt(m[2], 10);
+            const y = parseInt(m[3], 10);
+            return d >= 1 && d <= 31 && mo >= 1 && mo <= 12 && y >= 1900 && y <= 2100;
+        };
+
+        const normalizeCodeForMatch = (val) => {
+            return String(val || '')
+                .toLowerCase()
+                .replace(/^(?:phụ\s*lục|phu\s*luc|appendix|attachment|mẫu\s*số|mau\s*so|mẫu|mau|pl|điều|dieu|mục|muc|section|clause)\s*[\.\:\-]?\s*/i, '')
+                .trim();
+        };
+
+        const findMatchingAppendix = (appendicesMap, targetCode) => {
+            if (!appendicesMap || !targetCode) return null;
+            const allApps = Object.values(appendicesMap);
+            const cleanTarget = normalizeCodeForMatch(targetCode);
+            const noZeroTarget = cleanTarget.replace(/^0+(\d)/, '$1');
+            const targetDec = /^\d+$/.test(noZeroTarget) ? parseInt(noZeroTarget, 10) : romanToDecimal(cleanTarget);
+            const targetRoman = targetDec > 0 ? decimalToRoman(targetDec).toLowerCase() : '';
+
+            return allApps.find(app => {
+                const appId = String(app.id || '').toLowerCase().trim();
+                const appCode = normalizeCodeForMatch(app.code || '');
+                const appNoZero = appCode.replace(/^0+(\d)/, '$1');
+                if (appId === cleanTarget || appCode === cleanTarget || appNoZero === noZeroTarget) return true;
+                if (targetDec > 0) {
+                    const appDec = /^\d+$/.test(appNoZero) ? parseInt(appNoZero, 10) : romanToDecimal(appCode);
+                    if (appDec > 0 && appDec === targetDec) return true;
+                    if (targetRoman && appCode === targetRoman) return true;
+                }
+                return false;
+            }) || null;
+        };
+
+        const findMatchingArticle = (articlesMap, targetCode) => {
+            if (!articlesMap || !targetCode) return null;
+            const allArts = Object.values(articlesMap);
+            const rawLower = String(targetCode || '').trim().toLowerCase();
+            const cleanTarget = normalizeCodeForMatch(targetCode);
+            return allArts.find(a =>
+                String(a.id).trim().toLowerCase() === rawLower ||
+                String(a.id).trim().toLowerCase() === cleanTarget ||
+                (a.code && a.code.toLowerCase().trim() === rawLower) ||
+                (a.code && normalizeCodeForMatch(a.code) === cleanTarget)
+            ) || null;
+        };
+
+        const LINK_REF_PATTERN = /(?:(?:ORG|FLT|DSP|MNT|CAB|GRH|CGO|SEC|ISM)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:Table|Bảng|TABLE|BẢNG)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:ĐIỀU|Điều|Ðiều|Điều|DIEU|Dieu)\s*[\.\:\-]?\s*(\d+[a-zA-Z]?(?:\.\d+)*))|(?:(?:Mục|Muc|Section|Clause|Item)\s*(\d+\.\d+(?:\.\d+)*))|(?:(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)(?:\s+(?:số|so|No\.?))?\s*([0-9A-Za-zIVXLCDM\.\_\-]+))|(\b[1-9]\d*\.\d+(?:\.\d+)+\b)/gi;
+
         const renderTextWithHyperlinks = (text, onJump) => {
             if (!text || typeof text !== 'string') return text;
             
-            const linkRegex = /(?:(?:ORG|FLT|DSP|MNT|CAB|GRH|CGO|SEC|ISM)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:Table|Bảng|TABLE|BẢNG)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:ĐIỀU|Điều|Ðiều|Điều|DIEU|Dieu)\s*[\.\:\-]?\s*(\d+[a-zA-Z]?(?:\.\d+)*))|(?:(?:Mục|Muc|Section|Clause|Item)\s*(\d+\.\d+(?:\.\d+)*))|(?:(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)\s*([0-9A-Za-zIVXLCDM\.\_\-]+))|(\b[1-9]\d*\.\d+(?:\.\d+)+\b)/gi;
+            const linkRegex = new RegExp(LINK_REF_PATTERN.source, 'gi');
             
             const elements = [];
             let lastIndex = 0;
@@ -335,12 +401,24 @@
                 const matchEnd = linkRegex.lastIndex;
                 const fullMatch = match[0];
 
-                if (matchStart > lastIndex) {
-                    elements.push(text.substring(lastIndex, matchStart));
+                // Tránh bắt nhầm giữa từ (VD chữ cái đứng ngay trước)
+                if (matchStart > 0 && /[a-zA-ZÀ-ỹ0-9_]/.test(text[matchStart - 1])) {
+                    continue;
                 }
 
                 let targetCode = (match[1] || match[2] || match[3] || match[4] || fullMatch).trim();
-                let isAppendix = /(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)/i.test(fullMatch);
+                let isAppendix = Boolean(match[3]) || /(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)/i.test(fullMatch);
+
+                if (isAppendix && !isValidAppendixCode(match[3] || targetCode)) {
+                    continue;
+                }
+                if (match[4] && isLikelyDateCode(match[4])) {
+                    continue;
+                }
+
+                if (matchStart > lastIndex) {
+                    elements.push(text.substring(lastIndex, matchStart));
+                }
 
                 elements.push(
                     <span
@@ -411,27 +489,40 @@
             const results = [];
             const seen = new Set();
 
-            const refRegex = /(?:(?:ORG|FLT|DSP|MNT|CAB|GRH|CGO|SEC|ISM)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:Table|Bảng|TABLE|BẢNG)\s+[1-9]\d*\.\d+(?:\.\d+)*)|(?:(?:ĐIỀU|Điều|Ðiều|Điều|DIEU|Dieu)\s*[\.\:\-]?\s*(\d+[a-zA-Z]?(?:\.\d+)*))|(?:(?:Mục|Muc|Section|Clause|Item)\s*(\d+\.\d+(?:\.\d+)*))|(?:(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)\s*([0-9A-Za-zIVXLCDM\.\_\-]+))|(\b[1-9]\d*\.\d+(?:\.\d+)*\b)/gi;
-
-            const allArts = articlesMap ? Object.values(articlesMap) : [];
-            const allApps = appendicesMap ? Object.values(appendicesMap) : [];
+            const refRegex = new RegExp(LINK_REF_PATTERN.source, 'gi');
 
             let match;
             while ((match = refRegex.exec(text)) !== null) {
+                if (match.index > 0 && /[a-zA-ZÀ-ỹ0-9_]/.test(text[match.index - 1])) continue;
                 const fullMatch = match[0].trim();
                 const rawCode = (match[1] || match[2] || match[3] || match[4] || fullMatch).trim();
-                const uniqueKey = rawCode.toLowerCase();
+                const isAppRef = Boolean(match[3]) || /(?:Phụ\s*lục|Phu\s*luc|Appendix|Attachment|Mẫu|Mau)/i.test(fullMatch);
+                if (isAppRef && !isValidAppendixCode(match[3] || rawCode)) continue;
+                if (match[4] && isLikelyDateCode(match[4])) continue;
+
+                const uniqueKey = `${isAppRef ? 'app' : 'art'}_${rawCode.toLowerCase()}`;
                 const fullKey = fullMatch.toLowerCase();
                 if (!rawCode || seen.has(uniqueKey) || seen.has(fullKey)) continue;
 
-                const matchedArt = allArts.find(a => 
-                    String(a.id).trim().toLowerCase() === fullKey ||
-                    String(a.id).trim().toLowerCase() === uniqueKey ||
-                    (a.code && a.code.toLowerCase().trim() === fullKey) ||
-                    (a.code && a.code.toLowerCase().trim() === uniqueKey) ||
-                    (a.code && a.code.toLowerCase().replace(/^(?:mục|section|điều)\s*/i, '').trim() === uniqueKey)
-                );
+                if (isAppRef) {
+                    const matchedApp = findMatchingAppendix(appendicesMap, rawCode);
+                    if (matchedApp) {
+                        seen.add(uniqueKey);
+                        seen.add(fullKey);
+                        results.push({
+                            docId: activeDocId,
+                            docName: activeDocName,
+                            type: 'appendix',
+                            id: matchedApp.id,
+                            code: matchedApp.code ? (matchedApp.title.toLowerCase().includes('mẫu') ? `Mẫu ${matchedApp.code}` : `Phụ lục ${matchedApp.code}`) : matchedApp.title,
+                            raw: fullMatch,
+                            title: matchedApp.title
+                        });
+                    }
+                    continue;
+                }
 
+                const matchedArt = findMatchingArticle(articlesMap, rawCode) || findMatchingArticle(articlesMap, fullMatch);
                 if (matchedArt) {
                     seen.add(uniqueKey);
                     seen.add(fullKey);
@@ -443,26 +534,6 @@
                         code: matchedArt.code || matchedArt.id,
                         raw: fullMatch,
                         title: matchedArt.title
-                    });
-                    continue;
-                }
-
-                const matchedApp = allApps.find(app =>
-                    String(app.id).toLowerCase() === uniqueKey ||
-                    String(app.code || '').toLowerCase() === uniqueKey ||
-                    (app.code && app.code.toLowerCase().replace(/^(?:phụ lục|appendix|mẫu|mau)\s*/i, '').trim() === uniqueKey)
-                );
-
-                if (matchedApp) {
-                    seen.add(uniqueKey);
-                    results.push({
-                        docId: activeDocId,
-                        docName: activeDocName,
-                        type: 'appendix',
-                        id: matchedApp.id,
-                        code: matchedApp.code ? (matchedApp.title.toLowerCase().includes('mẫu') ? `Mẫu ${matchedApp.code}` : `Phụ lục ${matchedApp.code}`) : matchedApp.title,
-                        raw: fullMatch,
-                        title: matchedApp.title
                     });
                     continue;
                 }
@@ -527,40 +598,126 @@
             throw new Error("AI không trả về cấu trúc JSON hợp lệ.");
         };
 
-        const quickGoogleTranslate = async (text, targetLang = 'vi', sourceLang = 'auto') => {
-            if (!text || !text.trim()) return '';
-            
-            const paragraphs = text.split('\n');
+        const detectChunkSourceLang = (str, fallback = 'auto') => {
+            if (!str || !str.trim()) return fallback;
+            if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(str)) {
+                return 'vi';
+            }
+            if (fallback && fallback !== 'auto') return fallback;
+            if (/[a-zA-Z]{2,}/.test(str)) return 'en';
+            return 'auto';
+        };
+
+        const splitTextForTranslate = (text, maxRaw = 550, maxEncoded = 1600) => {
+            const normalized = String(text || '').replace(/\r\n?/g, '\n');
+            const paragraphs = normalized.split('\n');
             const chunks = [];
-            let currentChunk = '';
-            
+            let current = '';
+
+            const fits = (str) => str.length <= maxRaw && encodeURIComponent(str).length <= maxEncoded;
+
+            const pushPart = (part) => {
+                if (fits(part)) {
+                    chunks.push(part);
+                    return;
+                }
+                // Tách đoạn quá dài theo câu hoặc khoảng trắng
+                const tokens = part.split(/(?<=[\.\!\?\;\:])\s+|\s+/);
+                let buf = '';
+                for (const tok of tokens) {
+                    const candidate = buf ? `${buf} ${tok}` : tok;
+                    if (fits(candidate)) {
+                        buf = candidate;
+                    } else {
+                        if (buf) chunks.push(buf);
+                        if (fits(tok)) {
+                            buf = tok;
+                        } else {
+                            // Cắt cứng nếu 1 token quá dài
+                            let idx = 0;
+                            while (idx < tok.length) {
+                                let end = Math.min(tok.length, idx + 200);
+                                while (end > idx + 1 && encodeURIComponent(tok.slice(idx, end)).length > maxEncoded) {
+                                    end = Math.floor((idx + end) / 2);
+                                }
+                                chunks.push(tok.slice(idx, end));
+                                idx = end;
+                            }
+                            buf = '';
+                        }
+                    }
+                }
+                if (buf) chunks.push(buf);
+            };
+
             for (const p of paragraphs) {
-                if ((currentChunk + '\n' + p).length > 1500) {
-                    if (currentChunk) chunks.push(currentChunk);
-                    currentChunk = p;
+                if (!p.trim()) {
+                    if (current) {
+                        chunks.push(current);
+                        current = '';
+                    }
+                    chunks.push('');
+                    continue;
+                }
+                const candidate = current ? `${current}\n${p}` : p;
+                if (fits(candidate)) {
+                    current = candidate;
                 } else {
-                    currentChunk = currentChunk ? (currentChunk + '\n' + p) : p;
+                    if (current) chunks.push(current);
+                    if (fits(p)) {
+                        current = p;
+                    } else {
+                        pushPart(p);
+                        current = '';
+                    }
                 }
             }
-            if (currentChunk) chunks.push(currentChunk);
-            
+            if (current) chunks.push(current);
+            return chunks;
+        };
+
+        const quickGoogleTranslate = async (text, targetLang = 'vi', sourceLang = 'auto') => {
+            if (!text || !text.trim()) return '';
+
+            const chunks = splitTextForTranslate(text);
             const translatedChunks = [];
+
             for (const chunk of chunks) {
                 if (!chunk.trim()) {
                     translatedChunks.push('');
                     continue;
                 }
-                const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLang)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(chunk)}`;
-                const res = await fetch(url);
-                if (!res.ok) throw new Error("Không thể kết nối máy chủ dịch thuật");
-                const data = await res.json();
-                if (data && data[0] && Array.isArray(data[0])) {
-                    const piece = data[0].map(item => (item && item[0]) ? item[0] : '').join('');
-                    translatedChunks.push(piece);
-                } else {
+
+                const sl = sourceLang === 'auto' ? detectChunkSourceLang(chunk, 'auto') : sourceLang;
+                if (sl !== 'auto' && sl === targetLang) {
                     translatedChunks.push(chunk);
+                    continue;
                 }
+
+                let translatedPiece = null;
+                let lastErr = null;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sl)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(chunk)}`;
+                        const res = await fetch(url);
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const data = await res.json();
+                        if (data && Array.isArray(data[0])) {
+                            translatedPiece = data[0].map(item => (item && item[0]) ? item[0] : '').join('');
+                            break;
+                        }
+                        throw new Error("Dữ liệu dịch không hợp lệ");
+                    } catch (err) {
+                        lastErr = err;
+                        if (attempt === 0) await new Promise(r => setTimeout(r, 350));
+                    }
+                }
+                if (translatedPiece === null) {
+                    throw lastErr || new Error("Không thể kết nối máy chủ dịch thuật");
+                }
+                translatedChunks.push(translatedPiece);
             }
+
             return translatedChunks.join('\n');
         };
 
@@ -1734,9 +1891,8 @@
                                 });
                             }
                             if (art.translatedText) {
-                                newCache[`${docId}_art_${art.id}_en`] = art.translatedText;
-                                newCache[`${docId}_art_${art.id}_vi`] = art.translatedText;
-                                newCache[`${docId}_art_${art.id}`] = art.translatedText;
+                                const transLang = detectChunkSourceLang(art.translatedText, 'en') === 'vi' ? 'vi' : 'en';
+                                newCache[`${docId}_art_${art.id}_${transLang}`] = art.translatedText;
                             }
                         });
                         setTranslatedCache(newCache);
@@ -2098,14 +2254,15 @@
 
                 articlesList.forEach(art => {
                     const cacheKey = `${activeDocId}_art_${art.id}_${targetLangCode}`;
-                    const legacyKey = `${activeDocId}_art_${art.id}`;
+                    const preTransLang = art.translatedText
+                        ? (detectChunkSourceLang(art.translatedText, 'en') === 'vi' ? 'vi' : 'en')
+                        : null;
 
                     const existingTranslation = 
                         (art.translations && art.translations[targetLangCode]) ||
                         updatedCache[cacheKey] ||
                         translatedCache[cacheKey] ||
-                        (art.translatedText && (targetLangCode === 'en' || targetLangCode === (docIsEnglish ? 'vi' : 'en')) ? art.translatedText : null) ||
-                        translatedCache[legacyKey];
+                        (art.translatedText && preTransLang === targetLangCode ? art.translatedText : null);
 
                     if (!art.plainText || !art.plainText.trim()) {
                         if (!art.translations) art.translations = {};
@@ -2155,6 +2312,7 @@
                 }
 
                 let completed = 0;
+                let errorCount = 0;
                 for (let i = 0; i < pendingArticles.length; i++) {
                     if (batchTranslateAbortRef.current) break;
                     while (batchTranslatePauseRef.current) {
@@ -2167,26 +2325,32 @@
                     const cacheKey = `${activeDocId}_art_${art.id}_${targetLangCode}`;
 
                     try {
-                        const fullText = `${art.title}\n\n${art.plainText}`.trim();
+                        const rawPlain = (art.plainText || '').trim();
+                        const rawTitle = (art.title || '').trim();
+                        const fullText = (!rawPlain)
+                            ? rawTitle
+                            : (rawTitle && !rawPlain.toLowerCase().startsWith(rawTitle.toLowerCase()) ? `${rawTitle}\n\n${rawPlain}` : rawPlain);
+
                         if (!fullText) {
                             if (!art.translations) art.translations = {};
-                            art.translations[targetLangCode] = art.title || '';
-                            updatedCache[cacheKey] = art.title || '';
+                            art.translations[targetLangCode] = '';
+                            updatedCache[cacheKey] = '';
                         } else {
                             const translated = await quickGoogleTranslate(fullText, targetLangCode, 'auto');
-                            const finalTrans = translated || fullText;
-                            if (!art.translations) art.translations = {};
-                            art.translations[targetLangCode] = finalTrans;
-                            if (targetLangCode === 'en' || targetLangCode === 'vi') {
-                                art.translatedText = finalTrans;
+                            if (translated && translated.trim()) {
+                                if (!art.translations) art.translations = {};
+                                art.translations[targetLangCode] = translated;
+                                if (targetLangCode === 'en' || targetLangCode === 'vi') {
+                                    art.translatedText = translated;
+                                }
+                                updatedCache[cacheKey] = translated;
+                            } else {
+                                errorCount++;
                             }
-                            updatedCache[cacheKey] = finalTrans;
                         }
                     } catch (err) {
+                        errorCount++;
                         console.error(`Lỗi dịch mục ${art.code || art.id}:`, err);
-                        if (!art.translations) art.translations = {};
-                        art.translations[targetLangCode] = art.plainText;
-                        updatedCache[cacheKey] = art.plainText;
                     }
 
                     completed++;
@@ -2207,8 +2371,12 @@
                 setTranslatedCache(updatedCache);
 
                 if (targetArticle) {
-                    setArticleViewModes(prev => ({ ...prev, [`${activeDocId}_art_${targetArticle.id}`]: targetLangCode }));
-                    notify(`✅ Đã dịch mục sang ${targetLangName}!`);
+                    if (errorCount > 0) {
+                        notify(`⚠️ Không thể dịch mục ${targetArticle.code || targetArticle.id} (lỗi kết nối dịch thuật). Vui lòng thử lại!`);
+                    } else {
+                        setArticleViewModes(prev => ({ ...prev, [`${activeDocId}_art_${targetArticle.id}`]: targetLangCode }));
+                        notify(`✅ Đã dịch mục sang ${targetLangName}!`);
+                    }
                 } else {
                     setGlobalLangMode(prev => ({ ...prev, [activeDocId]: targetLangCode }));
                     const updatedViewModes = { ...articleViewModes };
@@ -2217,7 +2385,11 @@
                     });
                     setArticleViewModes(updatedViewModes);
                     setBatchTranslateModal(prev => ({ ...prev, isRunning: false }));
-                    notify(`🎉 Đã dịch xong và chuyển sang ${targetLangName}!`);
+                    if (errorCount > 0) {
+                        notify(`⚠️ Đã dịch sang ${targetLangName} (${errorCount} mục gặp lỗi kết nối, có thể bấm dịch lại để bổ sung).`);
+                    } else {
+                        notify(`🎉 Đã dịch xong và chuyển sang ${targetLangName}!`);
+                    }
                 }
             };
 
@@ -2247,13 +2419,13 @@
                 }
                 const targetLang = artMode;
                 const cacheKey = `${activeDocId}_art_${art.id}_${targetLang}`;
-                const legacyKey = `${activeDocId}_art_${art.id}`;
+                const preTransLang = art.translatedText
+                    ? (detectChunkSourceLang(art.translatedText, 'en') === 'vi' ? 'vi' : 'en')
+                    : null;
                 return (
                     (art.translations && art.translations[targetLang]) ||
                     translatedCache[cacheKey] ||
-                    (targetLang === 'en' && art.translatedText) ||
-                    (targetLang === 'vi' && art.translatedText) ||
-                    translatedCache[legacyKey] ||
+                    (art.translatedText && preTransLang === targetLang ? art.translatedText : null) ||
                     art.plainText || ''
                 );
             };
@@ -2271,27 +2443,28 @@
                     let matchFound = null;
                     let matchType = '';
 
-                    if (p && p.articles) {
-                        const artMatch = Object.values(p.articles).find(a => 
-                            String(a.id).trim().toLowerCase() === cleanCode.toLowerCase() ||
-                            (a.code && a.code.toLowerCase().replace(/^(?:điều|mục|section)\s*/i, '').trim() === cleanCode.toLowerCase()) ||
-                            (a.code && a.code.toLowerCase() === cleanCode.toLowerCase())
-                        );
-                        if (artMatch) {
-                            matchFound = artMatch;
-                            matchType = 'article';
+                    if (isAppendix) {
+                        if (p && p.appendices) {
+                            const appMatch = findMatchingAppendix(p.appendices, cleanCode);
+                            if (appMatch) {
+                                matchFound = appMatch;
+                                matchType = 'appendix';
+                            }
                         }
-                    }
-
-                    if (!matchFound && p && p.appendices) {
-                        const appMatch = Object.values(p.appendices).find(app => 
-                            String(app.id).toLowerCase() === cleanCode.toLowerCase() ||
-                            String(app.code || '').toLowerCase() === cleanCode.toLowerCase() ||
-                            (app.code && app.code.toLowerCase().replace(/^(?:phụ lục|appendix|mẫu|mau)\s*/i, '').trim() === cleanCode.toLowerCase())
-                        );
-                        if (appMatch) {
-                            matchFound = appMatch;
-                            matchType = 'appendix';
+                    } else {
+                        if (p && p.articles) {
+                            const artMatch = findMatchingArticle(p.articles, cleanCode) || findMatchingArticle(p.articles, raw);
+                            if (artMatch) {
+                                matchFound = artMatch;
+                                matchType = 'article';
+                            }
+                        }
+                        if (!matchFound && p && p.appendices && !/^(?:điều|dieu|mục|muc|section|clause)/i.test(String(raw || ''))) {
+                            const appMatch = findMatchingAppendix(p.appendices, cleanCode);
+                            if (appMatch) {
+                                matchFound = appMatch;
+                                matchType = 'appendix';
+                            }
                         }
                     }
 
@@ -3813,7 +3986,23 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                         const key = `BOQC_PL_${dec}`;
                                         if (!seenAppKeys.has(key)) {
                                             seenAppKeys.add(key);
+                                            const isBoilerplateAppLine = (s) => /^(?:\(Kèm theo|ngày\s+\d+\s+tháng|TÊN CƠ QUAN|TÊN CƠ SỞ|NAME OF|BỘ XÂY DỰNG|CỤC HÀNG KHÔNG|MINISTRY OF|CIVIL AVIATION|CỘNG HÒA|CỘNG HOÀ|Độc lập|SOCIALIST REPUBLIC|Independence|Số[:/]|Number ref|[_\-\.\s…]{3,}$)/i.test(String(s || '').trim());
                                             let appTitle = appMatch[2] ? appMatch[2].trim() : '';
+                                            if (isBoilerplateAppLine(appTitle)) appTitle = '';
+                                            if (!appTitle || /[,;:\-–]$|\b(?:VỀ|CỦA|VÀ|CHO|ĐỐI VỚI|TRONG)$/i.test(appTitle)) {
+                                                const collected = appTitle ? [appTitle] : [];
+                                                for (let look = 1; look <= 12 && (i + look) < allLines.length; look++) {
+                                                    const nl = allLines[i + look].trim();
+                                                    if (!nl) continue;
+                                                    if (boqcAppRegex.test(nl) || /^(?:I{1,3}|IV|V|VI{0,3}|IX|X)\.\s/i.test(nl) || /^\d+\.\s/.test(nl)) break;
+                                                    if (isBoilerplateAppLine(nl)) continue;
+                                                    collected.push(nl);
+                                                    if (collected.join(' ').length > 220 || (!/[,;:\-–]$|\b(?:VỀ|CỦA|VÀ|CHO|ĐỐI VỚI|TRONG)$/i.test(nl) && collected.length >= 1 && !/^TỜ KHAI$/i.test(nl) && !/^ĐƠN ĐỀ NGHỊ/i.test(nl))) {
+                                                        break;
+                                                    }
+                                                }
+                                                appTitle = collected.join(' ').replace(/\s+/g, ' ').trim();
+                                            }
                                             let fullTitle = appTitle ? `Phụ lục ${stdCode} - ${appTitle}` : `Phụ lục ${stdCode}`;
                                             appendixPositions.push({ code: stdCode, title: fullTitle, index: i, dedupeKey: key });
                                         }
@@ -4953,7 +5142,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                                                             {getAppendixBadgeLabel(app, isCurrentBoQC, isCurrentND223)}
                                                                         </span>
                                                                     </div>
-                                                                    <h4 className="font-bold text-xs my-1.5 line-clamp-2">{app.title}</h4>
+                                                                    <h4 className="font-bold text-xs my-1.5 leading-snug" title={app.title}>{app.title}</h4>
                                                                     <p className="text-xs text-slate-500 line-clamp-2 mb-2">{app.plainText || (app.pdfFileName ? `📄 ${app.pdfFileName}` : '(Đã liên kết dữ liệu từ GitHub)')}</p>
                                                                 </div>
                                                                 <div className="pt-2 border-t flex items-center justify-between">

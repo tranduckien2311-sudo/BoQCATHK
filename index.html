@@ -4066,6 +4066,28 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 }
                             }
 
+                            // Cắt bỏ tiêu đề Phần / Chương / Mục của chương kế tiếp bị dính ở cuối điều
+                            const trailingHeadingRegex = /^(?:PHẦN|Phần|PART|CHƯƠNG|Chương|CHAPTER|MỤC|Mục)\s*(?:[IVXLCDM]+|\d+)(?:\b|(?=[A-ZÀ-Ỹ]))/;
+                            let cutIdx = sliceLines.length;
+                            for (let k = sliceLines.length - 1; k >= Math.max(1, sliceLines.length - 6); k--) {
+                                const ln = sliceLines[k].trim();
+                                if (trailingHeadingRegex.test(ln)) {
+                                    const afterLines = sliceLines.slice(k + 1).map(x => x.trim()).filter(Boolean);
+                                    const allAfterAreHeadings = afterLines.every(x =>
+                                        trailingHeadingRegex.test(x) ||
+                                        (x.length < 220 && !/^(?:\d+[\.\)]|[a-zđ]\)|\-)\s/i.test(x) && x === x.toUpperCase())
+                                    );
+                                    if (allAfterAreHeadings) {
+                                        cutIdx = k;
+                                    }
+                                } else if (/^(?:\d+[\.\)]|[a-zđ]\))\s/i.test(ln) || ln.length > 220 || /[\.!?]$/.test(ln)) {
+                                    break;
+                                }
+                            }
+                            if (cutIdx < sliceLines.length) {
+                                sliceLines = sliceLines.slice(0, cutIdx);
+                            }
+
                             const plainText = sliceLines.join('\n').trim();
 
                             let pTitle = curr.part || "PART 1";

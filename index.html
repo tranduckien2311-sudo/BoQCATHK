@@ -1925,7 +1925,7 @@
 
                 // Lưu trạng thái của tài liệu hiện tại
                 const currentNavSnapshot = {
-                    tab,
+                    tab: tab === 'home' ? (docNavStates[activeDocId]?.tab && docNavStates[activeDocId].tab !== 'home' ? docNavStates[activeDocId].tab : 'all') : tab,
                     singleId,
                     singleAppendixKey,
                     page,
@@ -1951,7 +1951,7 @@
                 const validParts = (targetPkg?.parts || []).map(p => String(p.id));
 
                 if (savedState) {
-                    setTab(savedState.tab || 'all');
+                    setTab((savedState.tab && savedState.tab !== 'home') ? savedState.tab : 'all');
                     
                     if (savedState.singleId && targetPkg?.articles && targetPkg.articles[savedState.singleId]) {
                         setSingleId(savedState.singleId);
@@ -5061,8 +5061,27 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                         {/* ROW 1: TABS TÀI LIỆU */}
                         <div className="bg-slate-900 px-3 pt-2 flex gap-1 overflow-x-auto custom-scrollbar border-b border-slate-700 no-print touch-pan-x">
+                            <div
+                                onClick={() => { setJumpHistory(null); setTab('home'); }}
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-t-lg text-xs sm:text-sm cursor-pointer transition whitespace-nowrap shrink-0 font-bold ${tab === 'home' ? 'bg-slate-50 text-aviation-800 dark:bg-slate-800 dark:text-white shadow-[0_-2px_10px_rgba(0,0,0,0.2)]' : 'bg-slate-800 text-amber-300 hover:bg-slate-700 hover:text-amber-200'}`}
+                            >
+                                <span>🏠</span>
+                                <span>Trang chủ</span>
+                            </div>
                             {docs.map(d => (
-                                <div key={d.id} onClick={() => switchDoc(d.id)} className={`flex items-center gap-2 px-3 py-2 rounded-t-lg text-xs sm:text-sm cursor-pointer transition whitespace-nowrap shrink-0 group ${activeDocId === d.id ? 'bg-slate-50 text-aviation-800 font-bold dark:bg-slate-800 dark:text-white shadow-[0_-2px_10px_rgba(0,0,0,0.2)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}>
+                                <div
+                                    key={d.id}
+                                    onClick={async () => {
+                                        const wasHome = tab === 'home';
+                                        await switchDoc(d.id);
+                                        if (wasHome) {
+                                            setJumpHistory(null);
+                                            const savedTab = docNavStates[d.id]?.tab;
+                                            setTab(savedTab && savedTab !== 'home' ? savedTab : 'all');
+                                        }
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-2 rounded-t-lg text-xs sm:text-sm cursor-pointer transition whitespace-nowrap shrink-0 group ${tab !== 'home' && activeDocId === d.id ? 'bg-slate-50 text-aviation-800 font-bold dark:bg-slate-800 dark:text-white shadow-[0_-2px_10px_rgba(0,0,0,0.2)]' : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'}`}
+                                >
                                     <span>{d.type === 'pdf' ? '📄' : '📝'}</span>
                                     <span className="max-w-[180px] truncate font-semibold">{d.name}</span>
                                     {!isReaderClientMode && (
@@ -5092,11 +5111,18 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                     <h1 className="text-sm sm:text-base font-extrabold tracking-tight">
                                         HỆ THỐNG TRA CỨU QUY CHẾ & MANUALS HÀNG KHÔNG
                                     </h1>
-                                    <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
-                                        <span>Tài liệu đang xem:</span>
-                                        <span>•</span>
-                                        <span className="font-semibold text-yellow-300">{activeDocName} {activeDocType === 'docx' ? `(${dataCount} Mục/Điều)` : '(Bản PDF)'}</span>
-                                    </div>
+                                    {tab === 'home' ? (
+                                        <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
+                                            <span>🏠 Trang chủ:</span>
+                                            <span className="font-semibold text-yellow-300">Tìm kiếm & Tra cứu toàn bộ {docs.length} tài liệu</span>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-2 text-xs text-aviation-100 opacity-90">
+                                            <span>Tài liệu đang xem:</span>
+                                            <span>•</span>
+                                            <span className="font-semibold text-yellow-300">{activeDocName} {activeDocType === 'docx' ? `(${dataCount} Mục/Điều)` : '(Bản PDF)'}</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex items-center gap-2 flex-wrap">
@@ -5110,7 +5136,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                         <span>Tải Offline</span>
                                     </button>
 
-                                    {activeDocType === 'docx' && dataCount > 0 && (
+                                    {tab !== 'home' && activeDocType === 'docx' && dataCount > 0 && (
                                         <>
                                             {isGlobalTranslatedActive ? (
                                                 <button 
@@ -5172,11 +5198,10 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                             </div>
 
                             {/* ROW 3: NAVIGATION TABS */}
-                            {activeDocType === 'docx' && (
+                            {tab !== 'home' && activeDocType === 'docx' && (
                                 <div className="bg-aviation-900 border-t border-aviation-700/50 px-4">
                                     <div className="max-w-7xl mx-auto flex space-x-2 py-1.5 overflow-x-auto custom-scrollbar text-xs font-medium touch-pan-x">
                                         {[
-                                            { id: 'home', label: '🏠 Trang chủ' },
                                             { id: 'dashboard', label: '📊 Tổng quan' },
                                             { id: 'all', label: `📚 Tra cứu (${dataCount} Mục)` },
                                             { id: 'appendices', label: `📑 Phụ lục (${appendixCount})`, customClick: () => { setJumpHistory(null); setSingleAppendixKey(null); setTab('appendices'); } },
@@ -5194,22 +5219,10 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                         {/* MAIN CONTENT */}
                         <main className="max-w-7xl w-full mx-auto px-4 py-4 flex-1">
-                            {activeDocType === 'pdf' && (
-                                <div className="w-full h-[85vh] rounded-xl overflow-hidden shadow-xl border border-slate-300">
-                                    {docData && docData.pdfUrl ? (
-                                        <UniversalPdfViewer base64Data={docData.pdfUrl} fileName={activeDocName} title={activeDocName} />
-                                    ) : (
-                                        <div className="flex h-full items-center justify-center text-slate-500 font-bold">Đang tải file PDF...</div>
-                                    )}
-                                </div>
-                            )}
-
-                            {activeDocType === 'docx' && (
-                                <>
-                                    {/* TAB TRANG CHỦ - TÌM KIẾM ĐA TÀI LIỆU */}
-                                    {tab === 'home' && (
-                                        <div className="space-y-4">
-                                            <div className="bg-gradient-to-br from-aviation-800 via-aviation-700 to-sky-700 text-white p-5 sm:p-6 rounded-2xl shadow-lg space-y-4">
+                            {/* TRANG CHỦ ĐỘC LẬP - TÌM KIẾM ĐA TÀI LIỆU */}
+                            {tab === 'home' && (
+                                <div className="space-y-4">
+                                    <div className="bg-gradient-to-br from-aviation-800 via-aviation-700 to-sky-700 text-white p-5 sm:p-6 rounded-2xl shadow-lg space-y-4">
                                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                                     <div>
                                                         <h2 className="text-lg sm:text-xl font-extrabold flex items-center gap-2">
@@ -5390,7 +5403,20 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                             )}
                                         </div>
                                     )}
-                                    {/* TAB PHỤ LỤC & BIỂU MẪU */}
+
+                                    {tab !== 'home' && activeDocType === 'pdf' && (
+                                        <div className="w-full h-[85vh] rounded-xl overflow-hidden shadow-xl border border-slate-300">
+                                            {docData && docData.pdfUrl ? (
+                                                <UniversalPdfViewer base64Data={docData.pdfUrl} fileName={activeDocName} title={activeDocName} />
+                                            ) : (
+                                                <div className="flex h-full items-center justify-center text-slate-500 font-bold">Đang tải file PDF...</div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {tab !== 'home' && activeDocType === 'docx' && (
+                                        <>
+                                            {/* TAB PHỤ LỤC & BIỂU MẪU */}
                                     {tab === 'appendices' && (
                                         <div className="space-y-4">
                                             {isCurrentViewingJumpTarget && (

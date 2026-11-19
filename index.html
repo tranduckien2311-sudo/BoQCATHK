@@ -1618,7 +1618,12 @@
                 return activeDocName.toLowerCase().includes('223');
             }, [activeDocName]);
 
-            const [tab, setTab] = useState('all');
+            const [tab, setTab] = useState('home');
+            const [homeSearchQuery, setHomeSearchQuery] = useState('');
+            const [homeSelectedDocIds, setHomeSelectedDocIds] = useState([]);
+            const [homeTypeFilter, setHomeTypeFilter] = useState('all');
+            const [homePageLimit, setHomePageLimit] = useState(60);
+            const [homeDocsVersion, setHomeDocsVersion] = useState(0);
             const [search, setSearch] = useState('');
             const [appendixSearch, setAppendixSearch] = useState('');
             const [partFilter, setPartFilter] = useState('all');
@@ -2599,6 +2604,164 @@
                     setTab(prev.fromTab || 'all');
                 }
                 notify(`↩️ Đã quay về: ${prev.fromLabel} (${prev.fromDocName})`);
+            };
+
+            useEffect(() => {
+                if (tab !== 'home' || !docs || docs.length === 0) return;
+                let cancelled = false;
+                const preloadAllDocsForHome = async () => {
+                    let loadedAny = false;
+                    for (const d of docs) {
+                        if (cancelled) return;
+                        if (!GLOBAL_DOCS_STORE[d.id]) {
+                            const p = (d.id === activeDocId && docData)
+                                ? docData
+                                : await WorkspaceDB.get(d.id);
+                            if (p) {
+                                GLOBAL_DOCS_STORE[d.id] = p;
+                                loadedAny = true;
+                            }
+                        }
+                    }
+                    if (!cancelled && loadedAny) {
+                        setHomeDocsVersion(v => v + 1);
+                    }
+                };
+                preloadAllDocsForHome();
+                return () => { cancelled = true; };
+            }, [tab, docs, activeDocId, docData]);
+
+            const homeDocStats = useMemo(() => {
+                let totalArticles = 0;
+                let totalAppendices = 0;
+                const perDoc = {};
+                docs.forEach(d => {
+                    const p = GLOBAL_DOCS_STORE[d.id] || ((d.id === activeDocId && docData) ? docData : null);
+                    const artCount = p && p.articles ? Object.keys(p.articles).length : 0;
+                    const appCount = p && p.appendices ? Object.keys(p.appendices).length : 0;
+                    totalArticles += artCount;
+                    totalAppendices += appCount;
+                    perDoc[d.id] = { artCount, appCount, loaded: Boolean(p) };
+                });
+                return { totalArticles, totalAppendices, perDoc };
+            }, [docs, activeDocId, docData, homeDocsVersion]);
+
+            const homeSearchResults = useMemo(() => {
+                const rawQ = homeSearchQuery.trim();
+                if (!rawQ) return [];
+                const q = rawQ.toLowerCase();
+                const qClean = q.replace(/^(?:điều|dieu|mục|muc|section|phụ\s*lục|phu\s*luc|mẫu\s*số|mẫu|mau)\s*/i, '').trim();
+                const targetDocs = homeSelectedDocIds.length > 0
+                    ? docs.filter(d => homeSelectedDocIds.includes(d.id))
+                    : docs;
+
+                const makeSnippet = (text, query) => {
+                    if (!text) return '';
+                    const lower = text.toLowerCase();
+                    const idx = lower.indexOf(query);
+                    if (idx === -1) return text.slice(0, 180) + (text.length > 180 ? '...' : '');
+                    const start = Math.max(0, idx - 60);
+                    const end = Math.min(text.length, idx + query.length + 120);
+                    return (start > 0 ? '...' : '') + text.slice(start, end).replace(/\s+/g, ' ') + (end < text.length ? '...' : '');
+                };
+
+                const results = [];
+                for (const d of targetDocs) {
+                    const p = GLOBAL_DOCS_STORE[d.id] || ((d.id === activeDocId && docData) ? docData : null);
+                    if (!p) continue;
+
+                    if ((homeTypeFilter === 'all' || homeTypeFilter === 'article') && p.articles) {
+                        Object.values(p.articles).forEach(art => {
+                            const codeStr = String(art.code || art.id || '').toLowerCase();
+                            const idStr = String(art.id || '').toLowerCase();
+                            const titleStr = String(art.title || '').toLowerCase();
+                            const chapterStr = String(art.chapter || art.partTitle || '').toLowerCase();
+                            const plainStr = String(art.plainText || '').toLowerCase();
+
+                            let score = 0;
+                            if (codeStr === q || idStr === q || (qClean && (codeStr === qClean || idStr === qClean))) score = 100;
+                            else if (titleStr.includes(q)) score = 70;
+                            else if (codeStr.includes(q) || (qClean && codeStr.includes(qClean))) score = 60;
+                            else if (chapterStr.includes(q)) score = 40;
+                            else if (plainStr.includes(q)) score = 20;
+
+                            if (score > 0) {
+                                results.push({
+                                    key: `${d.id}_art_${art.id}`,
+                                    docId: d.id,
+                                    docName: d.name,
+                                    type: 'article',
+                                    id: art.id,
+                                    code: art.code || `Điều ${art.id}`,
+                                    title: art.title || `Điều ${art.id}`,
+                                    subtitle: art.chapter || art.partTitle || '',
+                                    snippet: makeSnippet(art.plainText || art.title || '', q),
+                                    score
+                                });
+                            }
+                        });
+                    }
+
+                    if ((homeTypeFilter === 'all' || homeTypeFilter === 'appendix') && p.appendices) {
+                        Object.values(p.appendices).forEach(app => {
+                            const codeStr = String(app.code || app.id || '').toLowerCase();
+                            const titleStr = String(app.title || '').toLowerCase();
+                            const plainStr = String(app.plainText || '').toLowerCase();
+
+                            let score = 0;
+                            if (codeStr === q || (qClean && codeStr === qClean)) score = 95;
+                            else if (titleStr.includes(q)) score = 75;
+                            else if (plainStr.includes(q)) score = 25;
+
+                            if (score > 0) {
+                                results.push({
+                                    key: `${d.id}_app_${app.id}`,
+                                    docId: d.id,
+                                    docName: d.name,
+                                    type: 'appendix',
+                                    id: app.id,
+                                    code: getAppendixBadgeLabel(app, d.id === 'main', d.name.toLowerCase().includes('223')),
+                                    title: app.title || app.code || app.id,
+                                    subtitle: app.pdfFileName || 'Phụ lục / Biểu mẫu',
+                                    snippet: app.plainText ? makeSnippet(app.plainText, q) : (app.pdfFileName ? `📄 ${app.pdfFileName}` : ''),
+                                    score
+                                });
+                            }
+                        });
+                    }
+                }
+
+                results.sort((a, b) => b.score - a.score);
+                return results;
+            }, [homeSearchQuery, homeSelectedDocIds, homeTypeFilter, docs, activeDocId, docData, homeDocsVersion]);
+
+            const handleHomeJumpToResult = async (item) => {
+                if (!item) return;
+                const prevDocId = activeDocId;
+                if (item.docId !== activeDocId) {
+                    await switchDoc(item.docId);
+                }
+
+                setJumpHistory({
+                    targetDocId: item.docId,
+                    targetId: item.id,
+                    targetType: item.type === 'appendix' ? 'appendices' : 'single',
+                    fromDocId: prevDocId,
+                    fromDocName: 'Trang chủ Tìm kiếm',
+                    fromTab: 'home',
+                    fromId: null,
+                    fromLabel: 'Trang chủ Tìm kiếm'
+                });
+
+                if (item.type === 'appendix') {
+                    setSingleAppendixKey(item.id);
+                    setTab('appendices');
+                    notify(`📍 Đã mở [${item.title}] trong "${item.docName}"`);
+                } else {
+                    setSingleId(item.id);
+                    setTab('single');
+                    notify(`📍 Đã mở [${item.code}] trong "${item.docName}"`);
+                }
             };
 
             const saveApiKey = (key) => {
@@ -5013,6 +5176,7 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
                                 <div className="bg-aviation-900 border-t border-aviation-700/50 px-4">
                                     <div className="max-w-7xl mx-auto flex space-x-2 py-1.5 overflow-x-auto custom-scrollbar text-xs font-medium touch-pan-x">
                                         {[
+                                            { id: 'home', label: '🏠 Trang chủ' },
                                             { id: 'dashboard', label: '📊 Tổng quan' },
                                             { id: 'all', label: `📚 Tra cứu (${dataCount} Mục)` },
                                             { id: 'appendices', label: `📑 Phụ lục (${appendixCount})`, customClick: () => { setJumpHistory(null); setSingleAppendixKey(null); setTab('appendices'); } },
@@ -5042,6 +5206,190 @@ YÊU CẦU ĐỊNH DẠNG: Trả về ĐÚNG 1 JSON OBJECT hoặc JSON ARRAY:
 
                             {activeDocType === 'docx' && (
                                 <>
+                                    {/* TAB TRANG CHỦ - TÌM KIẾM ĐA TÀI LIỆU */}
+                                    {tab === 'home' && (
+                                        <div className="space-y-4">
+                                            <div className="bg-gradient-to-br from-aviation-800 via-aviation-700 to-sky-700 text-white p-5 sm:p-6 rounded-2xl shadow-lg space-y-4">
+                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                                    <div>
+                                                        <h2 className="text-lg sm:text-xl font-extrabold flex items-center gap-2">
+                                                            <span>🏠</span>
+                                                            <span>Trung tâm Tra cứu Toàn bộ Tài liệu Hàng không</span>
+                                                        </h2>
+                                                        <p className="text-xs text-sky-100 mt-0.5">
+                                                            Tìm kiếm nhanh trên tất cả {docs.length} tài liệu ({homeDocStats.totalArticles} điều khoản &bull; {homeDocStats.totalAppendices} phụ lục/biểu mẫu) hoặc chọn riêng từng tài liệu.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={homeSearchQuery}
+                                                        onChange={(e) => { setHomeSearchQuery(e.target.value); setHomePageLimit(60); }}
+                                                        placeholder="🔍 Nhập từ khóa, số Điều (VD: Điều 37), mã mục (VD: MNT 1.1.1), tên biểu mẫu..."
+                                                        className="w-full pl-4 pr-20 py-3 rounded-xl text-sm text-slate-900 bg-white shadow-inner outline-none focus:ring-2 focus:ring-amber-400"
+                                                    />
+                                                    {homeSearchQuery && (
+                                                        <button
+                                                            onClick={() => setHomeSearchQuery('')}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold"
+                                                        >
+                                                            ✕ Xóa
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* BỘ LỌC TÀI LIỆU */}
+                                                <div className="space-y-2">
+                                                    <div className="text-[11px] font-bold uppercase tracking-wider text-sky-100">Phạm vi tìm kiếm theo tài liệu:</div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        <button
+                                                            onClick={() => { setHomeSelectedDocIds([]); setHomePageLimit(60); }}
+                                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${homeSelectedDocIds.length === 0 ? 'bg-amber-400 text-slate-900 border-amber-300 shadow' : 'bg-white/10 text-white border-white/25 hover:bg-white/20'}`}
+                                                        >
+                                                            🌐 Tất cả tài liệu ({docs.length})
+                                                        </button>
+                                                        {docs.map(d => {
+                                                            const isSelected = homeSelectedDocIds.includes(d.id);
+                                                            const st = homeDocStats.perDoc[d.id] || { artCount: 0, appCount: 0 };
+                                                            return (
+                                                                <button
+                                                                    key={d.id}
+                                                                    onClick={() => {
+                                                                        setHomePageLimit(60);
+                                                                        setHomeSelectedDocIds(prev =>
+                                                                            prev.includes(d.id)
+                                                                                ? prev.filter(id => id !== d.id)
+                                                                                : [...prev, d.id]
+                                                                        );
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition border flex items-center gap-1.5 ${isSelected ? 'bg-emerald-400 text-slate-900 border-emerald-300 shadow font-bold' : 'bg-white/10 text-white border-white/20 hover:bg-white/20'}`}
+                                                                >
+                                                                    <span>{isSelected ? '☑' : '☐'}</span>
+                                                                    <span className="truncate max-w-[200px]">{d.name}</span>
+                                                                    <span className="text-[10px] opacity-80">({st.artCount + st.appCount})</span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+
+                                                {/* BỘ LỌC LOẠI KẾT QUẢ */}
+                                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                                    {[
+                                                        { id: 'all', label: 'Tất cả (Điều khoản & Phụ lục)' },
+                                                        { id: 'article', label: '📘 Chỉ Điều khoản / Mục' },
+                                                        { id: 'appendix', label: '📑 Chỉ Phụ lục / Biểu mẫu' }
+                                                    ].map(f => (
+                                                        <button
+                                                            key={f.id}
+                                                            onClick={() => { setHomeTypeFilter(f.id); setHomePageLimit(60); }}
+                                                            className={`px-3 py-1 rounded-full text-xs font-bold transition ${homeTypeFilter === f.id ? 'bg-white text-aviation-800 shadow' : 'bg-aviation-900/50 text-sky-100 hover:bg-aviation-900/80'}`}
+                                                        >
+                                                            {f.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* KẾT QUẢ TÌM KIẾM */}
+                                            {!homeSearchQuery.trim() ? (
+                                                <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-4">
+                                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                                        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">📚 Danh sách tài liệu hiện có (Bấm để mở nhanh hoặc chọn ở trên để lọc tìm kiếm)</h3>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                        {docs.map(d => {
+                                                            const st = homeDocStats.perDoc[d.id] || { artCount: 0, appCount: 0 };
+                                                            return (
+                                                                <div
+                                                                    key={d.id}
+                                                                    onClick={async () => {
+                                                                        await switchDoc(d.id);
+                                                                        setTab('all');
+                                                                    }}
+                                                                    className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-aviation-50 dark:bg-slate-900/50 dark:hover:bg-aviation-950/40 cursor-pointer transition flex flex-col justify-between gap-2 group"
+                                                                >
+                                                                    <div>
+                                                                        <div className="font-bold text-xs text-slate-800 dark:text-slate-100 group-hover:text-aviation-600 break-words">{d.name}</div>
+                                                                        <div className="text-[11px] text-slate-500 mt-1">{st.artCount} điều khoản &bull; {st.appCount} phụ lục/mẫu</div>
+                                                                    </div>
+                                                                    <div className="flex justify-between items-center pt-2 border-t border-slate-200/70 dark:border-slate-700">
+                                                                        <span className="text-[11px] font-semibold text-aviation-600">Mở tài liệu &rarr;</span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center justify-between px-1">
+                                                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                            Tìm thấy <strong className="text-aviation-600">{homeSearchResults.length}</strong> kết quả cho "{homeSearchQuery}"
+                                                        </span>
+                                                        {homeSelectedDocIds.length > 0 && (
+                                                            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
+                                                                Đang lọc trong {homeSelectedDocIds.length} tài liệu đã chọn
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    {homeSearchResults.length === 0 ? (
+                                                        <div className="bg-white dark:bg-slate-800 p-8 rounded-xl border text-center text-sm text-slate-500">
+                                                            Không tìm thấy điều khoản hoặc phụ lục nào khớp với "{homeSearchQuery}".
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                                {homeSearchResults.slice(0, homePageLimit).map(item => (
+                                                                    <div
+                                                                        key={item.key}
+                                                                        onClick={() => handleHomeJumpToResult(item)}
+                                                                        className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:border-aviation-500 hover:shadow-md transition cursor-pointer flex flex-col justify-between gap-2"
+                                                                    >
+                                                                        <div>
+                                                                            <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${item.type === 'appendix' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-aviation-50 text-aviation-700 border border-aviation-200'}`}>
+                                                                                        {item.code}
+                                                                                    </span>
+                                                                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 truncate max-w-[200px]">
+                                                                                        📄 {item.docName}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 leading-snug">{item.title}</h4>
+                                                                            {item.subtitle && (
+                                                                                <div className="text-[10px] text-slate-400 mt-0.5 truncate">{item.subtitle}</div>
+                                                                            )}
+                                                                            {item.snippet && (
+                                                                                <p className="text-xs text-slate-600 dark:text-slate-300 mt-1.5 line-clamp-3 leading-relaxed">{item.snippet}</p>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="pt-2 border-t border-slate-100 dark:border-slate-700 flex justify-end">
+                                                                            <span className="text-xs font-bold text-aviation-600">Đi tới {item.type === 'appendix' ? 'phụ lục' : 'điều khoản'} &rarr;</span>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            {homeSearchResults.length > homePageLimit && (
+                                                                <div className="flex justify-center pt-2">
+                                                                    <button
+                                                                        onClick={() => setHomePageLimit(prev => prev + 60)}
+                                                                        className="px-5 py-2 rounded-xl bg-aviation-600 hover:bg-aviation-500 text-white text-xs font-bold shadow"
+                                                                    >
+                                                                        Xem thêm kết quả ({homeSearchResults.length - homePageLimit} còn lại)
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     {/* TAB PHỤ LỤC & BIỂU MẪU */}
                                     {tab === 'appendices' && (
                                         <div className="space-y-4">
